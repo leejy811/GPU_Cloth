@@ -190,7 +190,6 @@ void PBD_ObjectCloth::solveDistanceConstraint(int index0, int index1, double res
 
 void PBD_ObjectCloth::applyExtForces(double dt)
 {
-
 	vec3 gravity(0.0, -9.8, 0.0);
 	double linearDamping = 0.99;
 

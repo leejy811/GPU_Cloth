@@ -35,5 +35,13 @@
     <ClInclude Include="PBD_ObjectCloth.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
+    <ClInclude Include="PBD_Cuda.cuh">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <CudaCompile Include="PBD_Cuda.cu">
+      <Filter>소스 파일</Filter>
+    </CudaCompile>
   </ItemGroup>
 </Project>
