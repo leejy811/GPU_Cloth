@@ -25,7 +25,7 @@ __global__ void ComputeIntergrate_kernel(REAL3* pos, REAL3* pos1, REAL3* vel, ui
 	pos[idx] = pos1[idx];
 }
 
-__global__ void ComputeNormal_kernel(REAL3* fIdx, REAL3* pos, REAL3* fNorm, REAL3* vNorm, uint numFace)
+__global__ void ComputeNorm_kernel(uint3* fIdx, REAL3* pos, REAL3* fNorm, uint numFace)
 {
 	uint idx = threadIdx.x + blockDim.x * blockIdx.x;
 

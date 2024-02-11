@@ -15,9 +15,7 @@ void Engine::init(REAL3& gravity, REAL dt, char* filename)
 
 void	Engine::simulation(void)
 {
-	_cloths->computeNormal();
-	_cloths->copyToDevice();
-
+	_cloths->ComputeNormal_kernel();
 	_cloths->ComputeGravityForce_kernel(_gravity, _dt);
 	_cloths->Intergrate_kernel(_invdt);
 

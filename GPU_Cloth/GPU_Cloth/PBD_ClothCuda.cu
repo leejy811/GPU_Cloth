@@ -1,5 +1,4 @@
 #include "PBD_ClothCuda.cuh"
-#include <cmath>
 
 PBD_ClothCuda::PBD_ClothCuda()
 {
@@ -153,9 +152,10 @@ void PBD_ClothCuda::Intergrate_kernel(REAL invdt)
 		(d_Pos(), d_Pos1(), d_Vel(), _numVertices, invdt);
 }
 
-void PBD_ClothCuda::computeNormal_kernel(void)
+void PBD_ClothCuda::ComputeNormal_kernel(void)
 {
-
+	ComputeNorm_kernel << <divup(_numFaces, BLOCK_SIZE), BLOCK_SIZE >> >
+		(d_faceIdx(), d_Pos(), d_fNormal(), _numFaces);
 }
 
 void PBD_ClothCuda::draw(void)
@@ -172,11 +172,9 @@ void PBD_ClothCuda::draw(void)
 
 		glBegin(GL_POLYGON);
 
-		glNormal3f(h_vNormal[ino0].x, h_vNormal[ino0].y, h_vNormal[ino0].z);
+		glNormal3f(h_fNormal[i].x, h_fNormal[i].y, h_fNormal[i].z);
 		glVertex3f(a.x, a.y, a.z);
-		glNormal3f(h_vNormal[ino1].x, h_vNormal[ino1].y, h_vNormal[ino1].z);
 		glVertex3f(b.x, b.y, b.z);
-		glNormal3f(h_vNormal[ino2].x, h_vNormal[ino2].y, h_vNormal[ino2].z);
 		glVertex3f(c.x, c.y, c.z);
 
 		glEnd();

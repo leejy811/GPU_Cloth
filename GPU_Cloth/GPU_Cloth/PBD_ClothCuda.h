@@ -56,7 +56,7 @@ public:		//init
 public:		//Update
 	void ComputeGravityForce_kernel(REAL3& gravity, REAL dt);
 	void Intergrate_kernel(REAL dt);
-	void computeNormal_kernel(void);
+	void ComputeNormal_kernel(void);
 public:
 	void draw(void);
 public:		//Cuda
