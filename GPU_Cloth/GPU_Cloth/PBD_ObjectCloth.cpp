@@ -57,6 +57,7 @@ void PBD_ObjectCloth::loadObj(char* filename)
 			_faces.push_back(new Face(index++, v0, v1, v2));
 		}
 	}
+
 	printf("num. faces : %d\n", _faces.size());
 	moveToCenter(3.0);
 	buildAdjacency();
@@ -323,7 +324,7 @@ void PBD_ObjectCloth::applyWind(vec3 wind)
 void PBD_ObjectCloth::drawPoint(void)
 {
 	glDisable(GL_LIGHTING);
-	glPointSize(2.0f);
+	glPointSize(10.0f);
 	glBegin(GL_POINTS);
 	for (auto v : _vertices)
 	{

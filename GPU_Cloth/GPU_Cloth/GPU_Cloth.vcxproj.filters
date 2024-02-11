@@ -21,6 +21,9 @@
     <ClCompile Include="PBD_ObjectCloth.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
+    <ClCompile Include="Engine.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Vec3.h">
@@ -35,12 +38,18 @@
     <ClInclude Include="PBD_ObjectCloth.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="PBD_Cuda.cuh">
+    <ClInclude Include="PBD_ClothCuda.cuh">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="PBD_ClothCuda.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="Engine.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <CudaCompile Include="PBD_Cuda.cu">
+    <CudaCompile Include="PBD_ClothCuda.cu">
       <Filter>소스 파일</Filter>
     </CudaCompile>
   </ItemGroup>

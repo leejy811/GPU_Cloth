@@ -1,7 +1,7 @@
 #include <Windows.h>
 #include <iostream>
 #include "GL\glut.h"
-#include "PBD_ObjectCloth.h"
+#include "Engine.h"
 #include <ctime>
 #include <stdio.h>
 #include <stdlib.h>
@@ -23,21 +23,20 @@ double frame = 0.0;
 double prevTime = 0.0;
 double fps = 0.0;
 
-PBD_ObjectCloth* _pbd;
+Engine* _engine;
 
 void Init(void)
 {
 	glEnable(GL_DEPTH_TEST);
-	_pbd = new PBD_ObjectCloth("OBJ\\Bunny_close.obj");
+	_engine = new Engine(make_REAL3(0.0, -9.81, 0.0), 0.01, "OBJ\\Bunny_close.obj");
 }
 
-void Darw(void)
+void Draw(void)
 {
 	glEnable(GL_LIGHTING);
 	glEnable(GL_LIGHT0);
 
-	// Object Cloth
-	_pbd->drawSolid();
+	_engine->draw();
 
 	glDisable(GL_LIGHTING);
 }
@@ -85,7 +84,7 @@ void Update(void)
 		//	sprintf(filename, "capture\\capture-%d.bmp", index++);
 		//	Capture(filename, width, height);
 		//}
-		_pbd->simulation(0.01);
+		_engine->simulation();
 	}
 	::glutPostRedisplay();
 }
@@ -111,7 +110,7 @@ void Display(void)
 
 	//printf("%f, %f, %f, %f, %f\n", -zoom, tx, ty, rotx, roty);
 
-	Darw();
+	Draw();
 
 	glutSwapBuffers();
 }
@@ -189,11 +188,7 @@ void Keyboard(unsigned char key, int x, int y)
 		exit(0);
 	case 'r':
 	case 'R':
-		//_pbd->reset();
-		break;
-	case 'f':
-	case 'F':
-		_pbd->applyWind(Vec3<double>(-0.5, -0.25, -0.25));
+		//_engine->reset();
 		break;
 	case ' ':
 		simulation = !simulation;
