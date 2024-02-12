@@ -6,6 +6,7 @@
 #include "device_launch_parameters.h"
 #include "CUDA_Custom/DeviceManager.h"
 #include "CUDA_Custom/Dvector.h"
+#include "CUDA_Custom/PrefixArray.h"
 #include <GL/freeglut.h>
 #include <vector>
 #include <fstream>
@@ -25,6 +26,8 @@ public:		//Device
 	Dvector<REAL3> d_fNormal;
 	Dvector<REAL3> d_vNormal;
 	Dvector<REAL> d_InvMass;
+	DPrefixArray<uint> d_nbFaces;
+	DPrefixArray<uint> d_nbVertices;
 public:		//Host
 	vector<uint3> h_faceIdx;
 	vector<REAL3> h_pos;
@@ -33,6 +36,8 @@ public:		//Host
 	vector<REAL3> h_fNormal;
 	vector<REAL3> h_vNormal;
 	vector<REAL> h_invMass;
+	PrefixArray<uint> h_nbFaces;
+	PrefixArray<uint> h_nbVertices;
 public:	//const
 	uint _numVertices;
 	uint _numFaces;
@@ -52,17 +57,21 @@ public:		//init
 	void Init(uint iter, REAL damp, REAL stiff);
 	void	LoadObj(char* filename);
 	void moveCenter(REAL scale);
+	void buildAdjacency(void);
 	void computeNormal(void);
 public:		//Update
 	void ComputeGravityForce_kernel(REAL3& gravity, REAL dt);
 	void Intergrate_kernel(REAL dt);
-	void ComputeNormal_kernel(void);
+	void ComputeFaceNormal_kernel(void);
+	void ComputeVertexNormal_kernel(void);
 public:
 	void draw(void);
 public:		//Cuda
 	void InitDeviceMem(void);
 	void	copyToDevice(void);
 	void	copyToHost(void);
+	void	copyNbToDevice(void);
+	void	copyNbToHost(void);
 	void FreeDeviceMem(void);
 };
 

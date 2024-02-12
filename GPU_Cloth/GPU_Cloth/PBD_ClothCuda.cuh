@@ -25,7 +25,7 @@ __global__ void ComputeIntergrate_kernel(REAL3* pos, REAL3* pos1, REAL3* vel, ui
 	pos[idx] = pos1[idx];
 }
 
-__global__ void ComputeNorm_kernel(uint3* fIdx, REAL3* pos, REAL3* fNorm, uint numFace)
+__global__ void ComputeFaceNorm_kernel(uint3* fIdx, REAL3* pos, REAL3* fNorm, uint numFace)
 {
 	uint idx = threadIdx.x + blockDim.x * blockIdx.x;
 
@@ -43,4 +43,22 @@ __global__ void ComputeNorm_kernel(uint3* fIdx, REAL3* pos, REAL3* fNorm, uint n
 	REAL3 norm = Cross(v1 - v0, v2 - v0);
 	Normalize(norm);
 	fNorm[idx] = norm;
+}
+
+__global__ void ComputeVertexNorm_kernel(uint* nbFIdx, uint* nbFArray, REAL3* fNorm, REAL3* vNorm, uint numVer)
+{
+	uint idx = threadIdx.x + blockDim.x * blockIdx.x;
+
+	if (idx >= numVer)
+		return;
+
+	uint numNbFaces = nbFIdx[idx + 1] - nbFIdx[idx];
+
+	for (int i = 0; i < numNbFaces; i++)
+	{
+		uint fIdx = nbFArray[nbFIdx[idx] + i];
+		vNorm[idx] += fNorm[fIdx];
+	}
+	vNorm[idx] /= numNbFaces;
+	Normalize(vNorm[idx]);
 }

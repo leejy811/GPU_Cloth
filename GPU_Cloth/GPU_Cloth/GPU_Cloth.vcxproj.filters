@@ -24,6 +24,9 @@
     <ClCompile Include="Engine.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
+    <ClCompile Include="Contraint.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Vec3.h">
@@ -45,6 +48,12 @@
       <Filter>헤더 파일</Filter>
     </ClInclude>
     <ClInclude Include="Engine.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="Constraint.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="Constraint.cuh">
       <Filter>헤더 파일</Filter>
     </ClInclude>
   </ItemGroup>

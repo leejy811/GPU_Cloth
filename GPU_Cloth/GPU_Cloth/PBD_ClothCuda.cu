@@ -22,6 +22,7 @@ void PBD_ClothCuda::Init(uint iter, REAL damp, REAL stiff)
 
 	InitDeviceMem();
 	copyToDevice();
+	copyNbToDevice();
 }
 
 void	PBD_ClothCuda::LoadObj(char* filename)
@@ -70,7 +71,7 @@ void	PBD_ClothCuda::LoadObj(char* filename)
 	_numFaces = h_faceIdx.size();
 	_numVertices = h_pos.size();
 	moveCenter(1.0);
-	//buildAdjacency();
+	buildAdjacency();
 	computeNormal();
 
 	printf("Num of Faces: %d, Num of Vertices: %d\n", _numFaces, _numVertices);
@@ -104,6 +105,31 @@ void PBD_ClothCuda::moveCenter(REAL scale)
 			flag = true;
 		}
 	}
+}
+
+void PBD_ClothCuda::buildAdjacency(void)
+{
+	vector<set<uint>> nbFs(_numVertices);
+	vector<set<uint>> nbVs(_numVertices);
+
+	for (uint i = 0u; i < _numFaces; i++)
+	{
+		uint ino0 = h_faceIdx[i].x;
+		uint ino1 = h_faceIdx[i].y;
+		uint ino2 = h_faceIdx[i].z;
+		nbFs[ino0].insert(i);
+		nbFs[ino1].insert(i);
+		nbFs[ino2].insert(i);
+		nbVs[ino0].insert(ino1);
+		nbVs[ino0].insert(ino2);
+		nbVs[ino1].insert(ino2);
+		nbVs[ino1].insert(ino0);
+		nbVs[ino2].insert(ino0);
+		nbVs[ino2].insert(ino1);
+	}
+
+	h_nbFaces.init(nbFs);
+	h_nbVertices.init(nbVs);
 }
 
 void PBD_ClothCuda::computeNormal(void)
@@ -152,10 +178,16 @@ void PBD_ClothCuda::Intergrate_kernel(REAL invdt)
 		(d_Pos(), d_Pos1(), d_Vel(), _numVertices, invdt);
 }
 
-void PBD_ClothCuda::ComputeNormal_kernel(void)
+void PBD_ClothCuda::ComputeFaceNormal_kernel(void)
 {
-	ComputeNorm_kernel << <divup(_numFaces, BLOCK_SIZE), BLOCK_SIZE >> >
+	ComputeFaceNorm_kernel << <divup(_numFaces, BLOCK_SIZE), BLOCK_SIZE >> >
 		(d_faceIdx(), d_Pos(), d_fNormal(), _numFaces);
+}
+
+void PBD_ClothCuda::ComputeVertexNormal_kernel(void)
+{
+	ComputeVertexNorm_kernel << <divup(_numVertices, BLOCK_SIZE), BLOCK_SIZE >> >
+		(d_nbFaces._index(), d_nbFaces._array(), d_fNormal(), d_vNormal(), _numVertices);
 }
 
 void PBD_ClothCuda::draw(void)
@@ -172,9 +204,11 @@ void PBD_ClothCuda::draw(void)
 
 		glBegin(GL_POLYGON);
 
-		glNormal3f(h_fNormal[i].x, h_fNormal[i].y, h_fNormal[i].z);
+		glNormal3f(h_vNormal[ino0].x, h_vNormal[ino0].y, h_vNormal[ino0].z);
 		glVertex3f(a.x, a.y, a.z);
+		glNormal3f(h_vNormal[ino1].x, h_vNormal[ino1].y, h_vNormal[ino1].z);
 		glVertex3f(b.x, b.y, b.z);
+		glNormal3f(h_vNormal[ino2].x, h_vNormal[ino2].y, h_vNormal[ino2].z);
 		glVertex3f(c.x, c.y, c.z);
 
 		glEnd();
@@ -224,4 +258,16 @@ void	PBD_ClothCuda::copyToHost(void)
 	d_fNormal.copyToHost(h_fNormal);
 	d_vNormal.copyToHost(h_vNormal);
 	d_InvMass.copyToHost(h_invMass);
+}
+
+void	PBD_ClothCuda::copyNbToDevice(void)
+{
+	d_nbFaces.copyFromHost(h_nbFaces);
+	d_nbVertices.copyFromHost(h_nbVertices);
+}
+
+void	PBD_ClothCuda::copyNbToHost(void)
+{
+	d_nbFaces.copyToHost(h_nbFaces);
+	d_nbVertices.copyToHost(h_nbVertices);
 }
