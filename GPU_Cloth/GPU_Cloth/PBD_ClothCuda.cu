@@ -20,6 +20,12 @@ void PBD_ClothCuda::Init(uint iter, REAL damp, REAL stiff)
 	h_vel.resize(_numVertices, make_REAL3(0.0, 0.0, 0.0));
 	h_invMass.resize(_numVertices, 0.0);
 
+	_strechSpring->InitDeviceMem();
+	_strechSpring->copyToDevice();
+
+	_bendSpring->copyToDevice();
+	_bendSpring->InitDeviceMem();
+
 	InitDeviceMem();
 	copyToDevice();
 	copyNbToDevice();
@@ -109,6 +115,7 @@ void PBD_ClothCuda::moveCenter(REAL scale)
 
 void PBD_ClothCuda::buildAdjacency(void)
 {
+	//Neighbor
 	vector<set<uint>> nbFs(_numVertices);
 	vector<set<uint>> nbVs(_numVertices);
 
@@ -130,6 +137,47 @@ void PBD_ClothCuda::buildAdjacency(void)
 
 	h_nbFaces.init(nbFs);
 	h_nbVertices.init(nbVs);
+
+	//Constraint
+	_strechSpring = new Constraint(5, 0.9);
+	_bendSpring = new Constraint(5, 0.9);
+
+	for (uint i = 0u; i < _numFaces; i++)
+	{
+		uint ino[3] = { h_faceIdx[i].x, h_faceIdx[i].y, h_faceIdx[i].z };
+
+		for (int j = 0; j < 3; j++)
+		{
+			uint id0 = ino[j];
+			uint id1 = ino[(j + 1) % 3];
+			_strechSpring->h_EdgeIdx.push_back(make_uint2(id0, id1));
+			_strechSpring->h_RestLength.push_back(Length(h_pos[id0] - h_pos[id1]));
+			_strechSpring->_numConstraint++;
+		}
+
+		for (int j = 0; j < 3; j++)
+		{
+			uint id0 = ino[j];
+			uint id1 = ino[(j + 1) % 3];
+			uint id2 = ino[(j + 2) % 3];
+			for (int k = 0; k < h_nbVertices._index[id0 + 1] - h_nbVertices._index[id0]; k++)
+			{
+				bool fiag = false;
+				for (int u = 0; u < h_nbVertices._index[id1 + 1] - h_nbVertices._index[id1]; u++)
+				{
+					if (h_nbVertices._array[id0 + k] == h_nbVertices._array[id1 + u] && h_nbVertices._array[id0 + k] != id2)
+					{
+						_bendSpring->h_EdgeIdx.push_back(make_uint2(id2, h_nbVertices._array[id0 + k]));
+						_bendSpring->h_RestLength.push_back(Length(h_pos[id2] - h_pos[h_nbVertices._array[id0 + k]]));
+						_bendSpring->_numConstraint++;
+						fiag = true;
+						break;
+					}
+				}
+				if (fiag) break;
+			}
+		}
+	}
 }
 
 void PBD_ClothCuda::computeNormal(void)
@@ -188,6 +236,15 @@ void PBD_ClothCuda::ComputeVertexNormal_kernel(void)
 {
 	ComputeVertexNorm_kernel << <divup(_numVertices, BLOCK_SIZE), BLOCK_SIZE >> >
 		(d_nbFaces._index(), d_nbFaces._array(), d_fNormal(), d_vNormal(), _numVertices);
+}
+
+void PBD_ClothCuda::ProjectConstraint_kernel(void)
+{
+	for (int i = 0; i < _iteration; i++)
+	{
+		_strechSpring->IterateConstraint(d_Pos1, d_InvMass);
+		_bendSpring->IterateConstraint(d_Pos1, d_InvMass);
+	}
 }
 
 void PBD_ClothCuda::draw(void)

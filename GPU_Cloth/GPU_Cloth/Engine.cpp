@@ -18,6 +18,7 @@ void	Engine::simulation(void)
 	_cloths->ComputeFaceNormal_kernel();
 	_cloths->ComputeVertexNormal_kernel();
 	_cloths->ComputeGravityForce_kernel(_gravity, _dt);
+	_cloths->ProjectConstraint_kernel();
 	_cloths->Intergrate_kernel(_invdt);
 
 	_cloths->copyToHost();

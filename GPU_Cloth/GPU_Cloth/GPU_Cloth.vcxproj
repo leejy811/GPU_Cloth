@@ -79,7 +79,6 @@
     </CudaCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="Contraint.cpp" />
     <ClCompile Include="Engine.cpp" />
     <ClCompile Include="Face.cpp" />
     <ClCompile Include="main.cpp">
@@ -100,6 +99,7 @@
     <ClInclude Include="Vertex.h" />
   </ItemGroup>
   <ItemGroup>
+    <CudaCompile Include="Constraint.cu" />
     <CudaCompile Include="PBD_ClothCuda.cu" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

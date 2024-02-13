@@ -7,6 +7,7 @@
 #include "CUDA_Custom/DeviceManager.h"
 #include "CUDA_Custom/Dvector.h"
 #include "CUDA_Custom/PrefixArray.h"
+#include "Constraint.h"
 #include <GL/freeglut.h>
 #include <vector>
 #include <fstream>
@@ -45,6 +46,9 @@ public:	//const
 	REAL _linearDamping;
 	REAL _springK;
 	AABB _boundary;
+public:	//Constraint
+	Constraint* _strechSpring;
+	Constraint* _bendSpring;
 public:
 	PBD_ClothCuda();
 	PBD_ClothCuda(char* filename, uint iter, REAL damp, REAL stiff)
@@ -64,6 +68,7 @@ public:		//Update
 	void Intergrate_kernel(REAL dt);
 	void ComputeFaceNormal_kernel(void);
 	void ComputeVertexNormal_kernel(void);
+	void ProjectConstraint_kernel(void);
 public:
 	void draw(void);
 public:		//Cuda
