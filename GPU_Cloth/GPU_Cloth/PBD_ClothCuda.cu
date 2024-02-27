@@ -23,8 +23,8 @@ void PBD_ClothCuda::Init(uint iter, REAL damp, REAL stiff)
 	_strechSpring->InitDeviceMem();
 	_strechSpring->copyToDevice();
 
-	_bendSpring->copyToDevice();
 	_bendSpring->InitDeviceMem();
+	_bendSpring->copyToDevice();
 
 	InitDeviceMem();
 	copyToDevice();
@@ -77,10 +77,13 @@ void	PBD_ClothCuda::LoadObj(char* filename)
 	_numFaces = h_faceIdx.size();
 	_numVertices = h_pos.size();
 	moveCenter(1.0);
+	SetMass();
 	buildAdjacency();
 	computeNormal();
 
 	printf("Num of Faces: %d, Num of Vertices: %d\n", _numFaces, _numVertices);
+	printf("Num of Strech: %d, Num of Bend: %d\n", _strechSpring->_numConstraint, _strechSpring->_numConstraint);
+	printf("Num of Color Strech: %d, Num of Color Bend: %d\n", _strechSpring->_numColor, _strechSpring->_numColor);
 }
 
 void PBD_ClothCuda::moveCenter(REAL scale)
@@ -110,6 +113,14 @@ void PBD_ClothCuda::moveCenter(REAL scale)
 			_boundary._min = _boundary._max = pos;
 			flag = true;
 		}
+	}
+}
+
+void PBD_ClothCuda::SetMass(void)
+{
+	for (int i = 0; i < _numVertices; i++)
+	{
+		h_invMass.push_back(1.0);
 	}
 }
 
@@ -178,6 +189,9 @@ void PBD_ClothCuda::buildAdjacency(void)
 			}
 		}
 	}
+
+	_strechSpring->Init();
+	_bendSpring->Init();
 }
 
 void PBD_ClothCuda::computeNormal(void)
@@ -214,28 +228,34 @@ void PBD_ClothCuda::computeNormal(void)
 	}
 }
 
-void PBD_ClothCuda::ComputeGravityForce_kernel(REAL3& gravity, REAL dt)
+void PBD_ClothCuda::ComputeExternalForce_kernel(REAL3& gravity, REAL dt)
 {
-	ComputeGravity_kernel << <divup(_numVertices, BLOCK_SIZE), BLOCK_SIZE >> >
-		(d_Pos(), d_Pos1(), d_Vel(), gravity, _linearDamping, _numVertices, dt);
+	CompExternlaForce_kernel << <divup(_numVertices, BLOCK_SIZE), BLOCK_SIZE >> >
+		(d_Pos(), d_Pos1(), d_Vel(), d_InvMass(), gravity, _externalForce, _linearDamping, _numVertices, dt);
 }
 
 void PBD_ClothCuda::Intergrate_kernel(REAL invdt)
 {
-	ComputeIntergrate_kernel << <divup(_numVertices, BLOCK_SIZE), BLOCK_SIZE >> >
+	CompIntergrate_kernel << <divup(_numVertices, BLOCK_SIZE), BLOCK_SIZE >> >
 		(d_Pos(), d_Pos1(), d_Vel(), _numVertices, invdt);
 }
 
 void PBD_ClothCuda::ComputeFaceNormal_kernel(void)
 {
-	ComputeFaceNorm_kernel << <divup(_numFaces, BLOCK_SIZE), BLOCK_SIZE >> >
+	CompFaceNorm_kernel << <divup(_numFaces, BLOCK_SIZE), BLOCK_SIZE >> >
 		(d_faceIdx(), d_Pos(), d_fNormal(), _numFaces);
 }
 
 void PBD_ClothCuda::ComputeVertexNormal_kernel(void)
 {
-	ComputeVertexNorm_kernel << <divup(_numVertices, BLOCK_SIZE), BLOCK_SIZE >> >
+	CompVertexNorm_kernel << <divup(_numVertices, BLOCK_SIZE), BLOCK_SIZE >> >
 		(d_nbFaces._index(), d_nbFaces._array(), d_fNormal(), d_vNormal(), _numVertices);
+}
+
+void PBD_ClothCuda::ComputeWind_kernel(REAL3 wind)
+{
+	CompWind_kernel << <divup(_numFaces, BLOCK_SIZE), BLOCK_SIZE >> >
+		(d_faceIdx(), d_Pos1(), d_Vel(), wind, _numFaces);
 }
 
 void PBD_ClothCuda::ProjectConstraint_kernel(void)

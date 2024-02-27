@@ -3,11 +3,12 @@
 
 #pragma once
 #include "PBD_ClothCuda.h"
+#include <vector>
 
 class Engine
 {
 public:
-	PBD_ClothCuda* _cloths;
+	vector<PBD_ClothCuda*> _cloths;
 public:
 	AABB			_boundary;
 public:
@@ -17,16 +18,17 @@ public:
 	uint			_frame;
 public:
 	Engine() {}
-	Engine(REAL3& gravity, REAL dt, char* filename)
+	Engine(REAL3& gravity, REAL dt, char* filename, uint num)
 	{
-		init(gravity, dt, filename);
+		init(gravity, dt, filename, num);
 	}
 	~Engine() {}
 public:
-	void	init(REAL3& gravity, REAL dt, char* filename);
+	void	init(REAL3& gravity, REAL dt, char* filename, uint num);
 public:
 	void	simulation(void);
 	void	reset(void);
+	void	ApplyWind(REAL3 wind);
 public:
 	void	draw(void);
 };

@@ -1,6 +1,6 @@
 #include "Engine.h"
 
-void Engine::init(REAL3& gravity, REAL dt, char* filename)
+void Engine::init(REAL3& gravity, REAL dt, char* filename, uint num)
 {
 	_gravity = gravity;
 	_dt = dt;
@@ -9,27 +9,41 @@ void Engine::init(REAL3& gravity, REAL dt, char* filename)
 	_boundary._min = make_REAL3(-1.5);
 	_boundary._max = make_REAL3(1.5);
 
-	_cloths = new PBD_ClothCuda(filename, 5, 0.99, 0.9);
+	for (int i = 0; i < num; i++)
+	{
+		_cloths.push_back(new PBD_ClothCuda(filename, 20, 0.99, 0.7));
+	}
 	_frame = 0u;
 }
 
 void	Engine::simulation(void)
 {
-	_cloths->ComputeFaceNormal_kernel();
-	_cloths->ComputeVertexNormal_kernel();
-	_cloths->ComputeGravityForce_kernel(_gravity, _dt);
-	_cloths->ProjectConstraint_kernel();
-	_cloths->Intergrate_kernel(_invdt);
+	for (auto cloth : _cloths)
+	{
+		cloth->ComputeFaceNormal_kernel();
+		cloth->ComputeVertexNormal_kernel();
+		cloth->ComputeExternalForce_kernel(_gravity, _dt);
+		cloth->ProjectConstraint_kernel();
+		cloth->Intergrate_kernel(_invdt);
 
-	_cloths->copyToHost();
+		cloth->copyToHost();
+	}
 }
 
-void	Engine::reset(void)
+void	Engine::reset(void) 
 {
 
 }
+
+void	Engine::ApplyWind(REAL3 wind)
+{
+	for (auto cloth : _cloths)
+		cloth->ComputeWind_kernel(wind);
+}
+
 
 void Engine::draw(void)
 {
-	_cloths->draw();
+	for (auto cloth : _cloths)
+		cloth->draw();
 }

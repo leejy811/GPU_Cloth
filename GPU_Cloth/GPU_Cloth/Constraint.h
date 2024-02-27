@@ -9,7 +9,7 @@
 #include "CUDA_Custom/PrefixArray.h"
 #include <vector>
 
-#define CONST_BLOCK_SIZE 128
+#define CONST_BLOCK_SIZE 32
 
 using namespace std;
 
@@ -21,6 +21,7 @@ public:		//Device
 	DPrefixArray<uint> d_ColorIdx;
 public:		//Host
 	vector<uint2> h_EdgeIdx;
+	vector<uint2> h_GraphIdx;
 	vector<REAL> h_RestLength;
 	PrefixArray<uint> h_ColorIdx;
 public:	//const
@@ -39,6 +40,8 @@ public:
 	}
 	~Constraint();
 public:		//Init
+	void Init(void);
+	void InitGraphEdge(void);
 	void InitConstraintColor(void);
 public:		//Update
 	void IterateConstraint(Dvector<REAL3>& pos1, Dvector<REAL>& invm);

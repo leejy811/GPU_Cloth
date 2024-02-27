@@ -17,8 +17,8 @@ public:
 	vector<Vertex*> _vertices;
 	vector<Face*> _faces;
 public:
-	double			_iteration = 5.0;
-	double			_springK = 0.7;
+	double			_iteration = 20.0;
+	double			_springK = 0.99;
 public:
 	PBD_ObjectCloth();
 	PBD_ObjectCloth(char* filename)

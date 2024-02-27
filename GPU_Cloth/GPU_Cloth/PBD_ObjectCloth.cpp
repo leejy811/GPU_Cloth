@@ -42,8 +42,6 @@ void PBD_ObjectCloth::loadObj(char* filename)
 		}
 	}
 	printf("num. vertices : %d\n", _vertices.size());
-	printf("min boundary : %f, %f, %f\n", _minBoundary.x(), _minBoundary.y(), _minBoundary.z());
-	printf("max boundary : %f, %f, %f\n", _maxBoundary.x(), _maxBoundary.y(), _maxBoundary.z());
 
 	index = 0;
 	fseek(fp, 0, SEEK_SET);
@@ -82,7 +80,6 @@ void PBD_ObjectCloth::moveToCenter(double scale)
 		pos += grad;
 		v->_pos = pos;
 	}
-	printf("move to center\n");
 }
 
 void PBD_ObjectCloth::buildAdjacency(void)
@@ -124,12 +121,15 @@ void PBD_ObjectCloth::buildAdjacency(void)
 
 void PBD_ObjectCloth::computeRestLength(void)
 {
+	int numStrech = 0;
+	int numBend = 0;
 	for (auto f : _faces)
 	{
 		//init structural Length
 		for (int i = 0; i < 3; i++)
 		{
 			f->_structuralLength.push_back((f->_vertices[i]->_pos - f->_vertices[(i + 1) % 3]->_pos).getNorm());
+			numStrech++;
 		}
 
 		//init bend Length
@@ -142,11 +142,15 @@ void PBD_ObjectCloth::computeRestLength(void)
 				if (f->_vertices[id1]->hasNbVertex(nv) && nv != f->_vertices[i])
 				{
 					f->_bendLength.push_back((f->_vertices[i]->_pos - nv->_pos).getNorm());
+					numBend++;
 					break;
 				}
 			}
 		}
 	}
+
+	printf("Number Strech Constraint : %d\n", numStrech);
+	printf("Number Bend Constraint : %d\n", numBend);
 }
 
 void	PBD_ObjectCloth::computeNormal(void)
@@ -309,8 +313,8 @@ void PBD_ObjectCloth::computeWindForTriangle(vec3 wind, Face* f)
 	normal.normalize();
 	auto force = normal * (normal.dot(wind));
 	f->_vertices[0]->_vel += force;
-	f->_vertices[0]->_vel += force;
-	f->_vertices[0]->_vel += force;
+	f->_vertices[1]->_vel += force;
+	f->_vertices[2]->_vel += force;
 }
 
 void PBD_ObjectCloth::applyWind(vec3 wind)

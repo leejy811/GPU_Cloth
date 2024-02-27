@@ -39,12 +39,13 @@ public:		//Host
 	vector<REAL> h_invMass;
 	PrefixArray<uint> h_nbFaces;
 	PrefixArray<uint> h_nbVertices;
-public:	//const
+public:	
 	uint _numVertices;
 	uint _numFaces;
 	uint _iteration;
 	REAL _linearDamping;
 	REAL _springK;
+	REAL3 _externalForce;
 	AABB _boundary;
 public:	//Constraint
 	Constraint* _strechSpring;
@@ -63,8 +64,10 @@ public:		//init
 	void moveCenter(REAL scale);
 	void buildAdjacency(void);
 	void computeNormal(void);
+	void SetMass(void);
 public:		//Update
-	void ComputeGravityForce_kernel(REAL3& gravity, REAL dt);
+	void ComputeExternalForce_kernel(REAL3& extForce, REAL dt);
+	void ComputeWind_kernel(REAL3 wind);
 	void Intergrate_kernel(REAL dt);
 	void ComputeFaceNormal_kernel(void);
 	void ComputeVertexNormal_kernel(void);

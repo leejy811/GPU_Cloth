@@ -2,6 +2,7 @@
 #include <iostream>
 #include "GL\glut.h"
 #include "Engine.h"
+#include "PBD_ObjectCloth.h"
 #include <ctime>
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,16 +20,27 @@ int lasty = 0;
 unsigned char Buttons[3] = { 0 };
 bool simulation = false;
 
-double frame = 0.0;
-double prevTime = 0.0;
-double fps = 0.0;
+int frame = 0, curTime, timebase = 0;
 
 Engine* _engine;
+vector<PBD_ObjectCloth*> _pbd;
+
+#define CUDA 1
 
 void Init(void)
 {
 	glEnable(GL_DEPTH_TEST);
-	_engine = new Engine(make_REAL3(0.0, -9.81, 0.0), 0.01, "OBJ\\Bunny_close.obj");
+	if (CUDA)
+	{
+		_engine = new Engine(make_REAL3(0.0, -9.81, 0.0), 0.01, "OBJ\\dragon.obj", 1);
+	}
+	else
+	{
+		for (int i = 0; i < 1; i++)
+		{
+			_pbd.push_back(new PBD_ObjectCloth("OBJ\\dragon.obj"));
+		}
+	}
 }
 
 void Draw(void)
@@ -36,7 +48,17 @@ void Draw(void)
 	glEnable(GL_LIGHTING);
 	glEnable(GL_LIGHT0);
 
-	_engine->draw();
+	if (CUDA)
+	{
+		_engine->draw();
+	}
+	else
+	{
+		for (auto pbd : _pbd)
+		{
+			pbd->drawSolid();
+		}
+	}
 
 	glDisable(GL_LIGHTING);
 }
@@ -84,7 +106,29 @@ void Update(void)
 		//	sprintf(filename, "capture\\capture-%d.bmp", index++);
 		//	Capture(filename, width, height);
 		//}
-		_engine->simulation();
+		frame++;
+		curTime = glutGet(GLUT_ELAPSED_TIME);
+
+		if (curTime - timebase > 1000)
+		{
+			double fps = frame * 1000.0 / (curTime - timebase);
+			timebase = curTime;
+			frame = 0;
+
+			printf("FPS : %f\n", fps);
+		}
+
+		if (CUDA)
+		{
+			_engine->simulation();
+		}
+		else
+		{
+			for (auto pbd : _pbd)
+			{
+				pbd->simulation(0.01);
+			}
+		}
 	}
 	::glutPostRedisplay();
 }
@@ -189,6 +233,20 @@ void Keyboard(unsigned char key, int x, int y)
 	case 'r':
 	case 'R':
 		//_engine->reset();
+		break;
+	case 'f':
+	case 'F':
+		if (CUDA)
+		{
+			_engine->ApplyWind(make_REAL3(-0.5, -0.25, -0.25));
+		}
+		else
+		{
+			for (auto pbd : _pbd)
+			{
+				pbd->applyWind(vec3(-0.5, -0.25, -0.25));
+			}
+		}
 		break;
 	case ' ':
 		simulation = !simulation;
