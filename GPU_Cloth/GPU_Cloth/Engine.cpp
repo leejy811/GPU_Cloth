@@ -6,12 +6,12 @@ void Engine::init(REAL3& gravity, REAL dt, char* filename, uint num)
 	_dt = dt;
 	_invdt = 1.0 / dt;
 
-	_boundary._min = make_REAL3(-1.5);
-	_boundary._max = make_REAL3(1.5);
+	_boundary._min = make_REAL3(0.0);
+	_boundary._max = make_REAL3(1.0);
 
 	for (int i = 0; i < num; i++)
 	{
-		_cloths.push_back(new PBD_ClothCuda(filename, 20, 0.99, 0.7));
+		_cloths.push_back(new PBD_ClothCuda(filename, 10, 0.99, 0.9, 128, 0.04, 0.1));
 	}
 	_frame = 0u;
 }
@@ -20,12 +20,21 @@ void	Engine::simulation(void)
 {
 	for (auto cloth : _cloths)
 	{
-		cloth->ComputeFaceNormal_kernel();
-		cloth->ComputeVertexNormal_kernel();
-		cloth->ComputeExternalForce_kernel(_gravity, _dt);
-		cloth->ProjectConstraint_kernel();
-		cloth->Intergrate_kernel(_invdt);
+		double subDt = _dt / cloth->_iteration;
+		double subInvDt = 1.0 / subDt;
 
+		for (int i = 0; i < cloth->_iteration; i++)
+		{
+			cloth->ComputeFaceNormal_kernel();
+			cloth->ComputeVertexNormal_kernel();
+			cloth->ComputeExternalForce_kernel(_gravity, subDt);
+			cloth->ProjectConstraint_kernel();
+			cloth->SetHashTable_kernel();
+			cloth->UpdateFaceAABB_Kernel();
+			cloth->Colide_kernel();
+			cloth->Intergrate_kernel(subInvDt);
+			cloth->LevelSetCollision_kernel();
+		}
 		cloth->copyToHost();
 	}
 }
@@ -46,4 +55,10 @@ void Engine::draw(void)
 {
 	for (auto cloth : _cloths)
 		cloth->draw();
+}
+
+void Engine::drawWire(void)
+{
+	for (auto cloth : _cloths)
+		cloth->drawWire();
 }

@@ -1,4 +1,4 @@
-//#include "DeviceManager.cuh"
+#include "DeviceManager.cuh"
 //
 //__global__ void Sum_kernel(REAL* X, size_t size, REAL* result) {
 //	extern __shared__ REAL s_sums[];

@@ -31,6 +31,7 @@ public:
 	void	ApplyWind(REAL3 wind);
 public:
 	void	draw(void);
+	void	drawWire(void);
 };
 
 #endif

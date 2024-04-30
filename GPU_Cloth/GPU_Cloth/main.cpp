@@ -27,6 +27,8 @@ vector<PBD_ObjectCloth*> _pbd;
 
 #define CUDA 1
 
+bool MODE = true;
+
 void Init(void)
 {
 	glEnable(GL_DEPTH_TEST);
@@ -38,7 +40,7 @@ void Init(void)
 	{
 		for (int i = 0; i < 1; i++)
 		{
-			_pbd.push_back(new PBD_ObjectCloth("OBJ\\dragon.obj"));
+			_pbd.push_back(new PBD_ObjectCloth("OBJ\\Bunny_Close.obj"));
 		}
 	}
 }
@@ -50,7 +52,10 @@ void Draw(void)
 
 	if (CUDA)
 	{
-		_engine->draw();
+		if (MODE)
+			_engine->draw();
+		else
+			_engine->drawWire();
 	}
 	else
 	{
@@ -135,7 +140,7 @@ void Update(void)
 
 void Display(void)
 {
-	glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glLoadIdentity();
 
@@ -247,6 +252,10 @@ void Keyboard(unsigned char key, int x, int y)
 				pbd->applyWind(vec3(-0.5, -0.25, -0.25));
 			}
 		}
+		break;
+	case 't':
+	case 'T':
+		MODE = !MODE;
 		break;
 	case ' ':
 		simulation = !simulation;

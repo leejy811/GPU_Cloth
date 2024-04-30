@@ -10,12 +10,10 @@ PBD_ClothCuda::~PBD_ClothCuda()
 	FreeDeviceMem();
 }
 
-void PBD_ClothCuda::Init(uint iter, REAL damp, REAL stiff)
+void PBD_ClothCuda::Init()
 {
-	_iteration = iter;
-	_linearDamping = damp;
-	_springK = stiff;
-
+	_thickness = 4.0 / _gridRes;
+	h_flag.resize(_numVertices, false);
 	h_pos1.resize(_numVertices, make_REAL3(0.0, 0.0, 0.0));
 	h_vel.resize(_numVertices, make_REAL3(0.0, 0.0, 0.0));
 	h_invMass.resize(_numVertices, 0.0);
@@ -29,6 +27,10 @@ void PBD_ClothCuda::Init(uint iter, REAL damp, REAL stiff)
 	InitDeviceMem();
 	copyToDevice();
 	copyNbToDevice();
+
+	d_restPos.resize(_numVertices);
+	d_restPos.memset(0);
+	d_restPos.copyFromHost(h_pos);
 }
 
 void	PBD_ClothCuda::LoadObj(char* filename)
@@ -76,14 +78,37 @@ void	PBD_ClothCuda::LoadObj(char* filename)
 	}
 	_numFaces = h_faceIdx.size();
 	_numVertices = h_pos.size();
-	moveCenter(1.0);
+	moveCenter(0.5);
 	SetMass();
 	buildAdjacency();
 	computeNormal();
 
+	REAL3 maxPos = make_REAL3(-100.0, -100.0, -100.0);
+	REAL3 minPos = make_REAL3(100.0, 100.0, 100.0);
+
+	for (int i = 0; i < _numVertices; i++)
+	{
+		if (maxPos.x < h_pos[i].x)
+			maxPos.x = h_pos[i].x;
+		if (maxPos.y < h_pos[i].y)
+			maxPos.y = h_pos[i].y;
+		if (maxPos.z < h_pos[i].z)
+			maxPos.z = h_pos[i].z;
+
+		if (minPos.x > h_pos[i].x)
+			minPos.x = h_pos[i].x;
+		if (minPos.y > h_pos[i].y)
+			minPos.y = h_pos[i].y;
+		if (minPos.z > h_pos[i].z)
+			minPos.z = h_pos[i].z;
+	}
+
+	printf("mas Pos : %f / %f / %f\n", maxPos.x, maxPos.y, maxPos.z);
+	printf("min Pos : %f / %f / %f\n", minPos.x, minPos.y, minPos.z);
+
 	printf("Num of Faces: %d, Num of Vertices: %d\n", _numFaces, _numVertices);
-	printf("Num of Strech: %d, Num of Bend: %d\n", _strechSpring->_numConstraint, _strechSpring->_numConstraint);
-	printf("Num of Color Strech: %d, Num of Color Bend: %d\n", _strechSpring->_numColor, _strechSpring->_numColor);
+	printf("Num of Strech: %d, Num of Bend: %d\n", _strechSpring->_numConstraint, _bendSpring->_numConstraint);
+	printf("Num of Color Strech: %d, Num of Color Bend: %d\n", _strechSpring->_numColor, _bendSpring->_numColor);
 }
 
 void PBD_ClothCuda::moveCenter(REAL scale)
@@ -114,6 +139,11 @@ void PBD_ClothCuda::moveCenter(REAL scale)
 			flag = true;
 		}
 	}
+
+	for (int i = 0; i < _numVertices; i++)
+	{
+		h_pos[i] += make_REAL3(1.0, 1.0, 1.0);
+	}
 }
 
 void PBD_ClothCuda::SetMass(void)
@@ -125,6 +155,14 @@ void PBD_ClothCuda::SetMass(void)
 }
 
 void PBD_ClothCuda::buildAdjacency(void)
+{
+	buildAdjacency_VF();
+	buildEdges();
+	buildAdjacency_EF();
+	buildConstraint();
+}
+
+void PBD_ClothCuda::buildAdjacency_VF(void)
 {
 	//Neighbor
 	vector<set<uint>> nbFs(_numVertices);
@@ -146,52 +184,98 @@ void PBD_ClothCuda::buildAdjacency(void)
 		nbVs[ino2].insert(ino1);
 	}
 
-	h_nbFaces.init(nbFs);
+	h_nbVFaces.init(nbFs);
 	h_nbVertices.init(nbVs);
+}
 
-	//Constraint
-	_strechSpring = new Constraint(5, 0.9);
-	_bendSpring = new Constraint(5, 0.9);
+void PBD_ClothCuda::buildEdges(void)
+{
+	vector<bool> flags(_numVertices, false);
 
-	for (uint i = 0u; i < _numFaces; i++)
+	for (int i = 0; i < _numVertices; i++)
 	{
-		uint ino[3] = { h_faceIdx[i].x, h_faceIdx[i].y, h_faceIdx[i].z };
-
-		for (int j = 0; j < 3; j++)
+		for (int j = h_nbVertices._index[i]; j < h_nbVertices._index[i + 1]; j++)
 		{
-			uint id0 = ino[j];
-			uint id1 = ino[(j + 1) % 3];
-			_strechSpring->h_EdgeIdx.push_back(make_uint2(id0, id1));
-			_strechSpring->h_RestLength.push_back(Length(h_pos[id0] - h_pos[id1]));
-			_strechSpring->_numConstraint++;
+			if (!flags[h_nbVertices._array[j]])
+				h_edgeIdx.push_back(make_uint2(i, h_nbVertices._array[j]));
 		}
+		flags[i] = true;
+	}
 
-		for (int j = 0; j < 3; j++)
+	_numEdges = h_edgeIdx.size();
+}
+
+void PBD_ClothCuda::buildAdjacency_EF(void)
+{
+	vector<set<uint>> nbEF(_numEdges);
+
+	for (int i = 0; i < _numEdges; i++)
+	{
+		uint eid0 = h_edgeIdx[i].x;
+		uint eid1 = h_edgeIdx[i].y;
+
+		for (int j = h_nbVFaces._index[eid0]; j < h_nbVFaces._index[eid0 + 1]; j++)
 		{
-			uint id0 = ino[j];
-			uint id1 = ino[(j + 1) % 3];
-			uint id2 = ino[(j + 2) % 3];
-			for (int k = 0; k < h_nbVertices._index[id0 + 1] - h_nbVertices._index[id0]; k++)
+			uint fIdx = h_nbVFaces._array[j];
+			uint fid0 = h_faceIdx[fIdx].x;
+			uint fid1 = h_faceIdx[fIdx].y;
+			uint fid2 = h_faceIdx[fIdx].z;
+			if ((fid0 == eid0 || fid1 == eid0 || fid2 == eid0) && (fid0 == eid1 || fid1 == eid1 || fid2 == eid1))
 			{
-				bool fiag = false;
-				for (int u = 0; u < h_nbVertices._index[id1 + 1] - h_nbVertices._index[id1]; u++)
-				{
-					if (h_nbVertices._array[id0 + k] == h_nbVertices._array[id1 + u] && h_nbVertices._array[id0 + k] != id2)
-					{
-						_bendSpring->h_EdgeIdx.push_back(make_uint2(id2, h_nbVertices._array[id0 + k]));
-						_bendSpring->h_RestLength.push_back(Length(h_pos[id2] - h_pos[h_nbVertices._array[id0 + k]]));
-						_bendSpring->_numConstraint++;
-						fiag = true;
-						break;
-					}
-				}
-				if (fiag) break;
+				nbEF[i].insert(fIdx);
 			}
 		}
 	}
 
-	_strechSpring->Init();
-	_bendSpring->Init();
+	h_nbEFaces.init(nbEF);
+}
+
+void PBD_ClothCuda::buildConstraint(void)
+{
+	//Constraint
+	_strechSpring = new Constraint(_iteration, _springK);
+	_bendSpring = new Constraint(_iteration, _springK);
+
+	vector<set<uint>> stretchEdges(_numVertices);
+	vector<set<uint>> bendEdges(_numVertices);
+
+	for (int i = 0; i < _numEdges; i++)
+	{
+		//strech spring
+		_strechSpring->h_EdgeIdx.push_back(h_edgeIdx[i]);
+		_strechSpring->h_RestLength.push_back(Length(h_pos[h_edgeIdx[i].x] - h_pos[h_edgeIdx[i].y]));
+		_strechSpring->_numConstraint++;
+		stretchEdges[h_edgeIdx[i].x].insert(i);
+		stretchEdges[h_edgeIdx[i].y].insert(i);
+
+		//bend spring
+		if (h_nbEFaces._index[i + 1] - h_nbEFaces._index[i] != 2)
+			continue;
+
+		uint edgeSum = h_edgeIdx[i].x + h_edgeIdx[i].y;
+		uint fId0 = h_nbEFaces._array[h_nbEFaces._index[i]];
+		uint fId1 = h_nbEFaces._array[h_nbEFaces._index[i] + 1];
+
+		uint vId0 = h_faceIdx[fId0].x + h_faceIdx[fId0].y + h_faceIdx[fId0].z - edgeSum;
+		uint vId1 = h_faceIdx[fId1].x + h_faceIdx[fId1].y + h_faceIdx[fId1].z - edgeSum;
+
+		_bendSpring->h_EdgeIdx.push_back(make_uint2(vId0, vId1));
+		_bendSpring->h_RestLength.push_back(Length(h_pos[vId0] - h_pos[vId1]));
+
+		bendEdges[vId0].insert(_bendSpring->_numConstraint);
+		bendEdges[vId1].insert(_bendSpring->_numConstraint);
+		
+		stretchEdges[h_edgeIdx[i].x].insert(i);
+		stretchEdges[h_edgeIdx[i].y].insert(i);
+
+		_bendSpring->_numConstraint++;
+	}
+
+	_strechSpring->h_nbCEdges.init(stretchEdges);
+	_bendSpring->h_nbCEdges.init(bendEdges);
+
+	_strechSpring->Init(_numVertices);
+	_bendSpring->Init(_numVertices);
 }
 
 void PBD_ClothCuda::computeNormal(void)
@@ -231,13 +315,13 @@ void PBD_ClothCuda::computeNormal(void)
 void PBD_ClothCuda::ComputeExternalForce_kernel(REAL3& gravity, REAL dt)
 {
 	CompExternlaForce_kernel << <divup(_numVertices, BLOCK_SIZE), BLOCK_SIZE >> >
-		(d_Pos(), d_Pos1(), d_Vel(), d_InvMass(), gravity, _externalForce, _linearDamping, _numVertices, dt);
+		(d_Pos(), d_Pos1(), d_Vel(), d_InvMass(), gravity, _externalForce, _linearDamping, _numVertices, dt, _thickness);
 }
 
 void PBD_ClothCuda::Intergrate_kernel(REAL invdt)
 {
 	CompIntergrate_kernel << <divup(_numVertices, BLOCK_SIZE), BLOCK_SIZE >> >
-		(d_Pos(), d_Pos1(), d_Vel(), _numVertices, invdt);
+		(d_Pos(), d_Pos1(), d_Vel(), _numVertices, _thickness, invdt);
 }
 
 void PBD_ClothCuda::ComputeFaceNormal_kernel(void)
@@ -260,16 +344,80 @@ void PBD_ClothCuda::ComputeWind_kernel(REAL3 wind)
 
 void PBD_ClothCuda::ProjectConstraint_kernel(void)
 {
-	for (int i = 0; i < _iteration; i++)
-	{
-		_strechSpring->IterateConstraint(d_Pos1, d_InvMass);
-		_bendSpring->IterateConstraint(d_Pos1, d_InvMass);
-	}
+	_strechSpring->IterateConstraint(d_Pos1, d_InvMass);
+	_bendSpring->IterateConstraint(d_Pos1, d_InvMass);
+}
+
+void PBD_ClothCuda::SetHashTable_kernel(void)
+{
+	CalculateHash_Kernel();
+	SortParticle_Kernel();
+	FindCellStart_Kernel();
+}
+
+void PBD_ClothCuda::CalculateHash_Kernel(void)
+{
+	uint numThreads, numBlocks;
+	ComputeGridSize(_numVertices, 256, numBlocks, numThreads);
+
+	CalculateHash_D << <numBlocks, numThreads >> >
+		(d_gridHash(), d_gridIdx(), d_Pos1(), _gridRes, _numVertices);
+}
+
+void PBD_ClothCuda::SortParticle_Kernel(void)
+{
+	thrust::sort_by_key(thrust::device_ptr<uint>(d_gridHash()),
+		thrust::device_ptr<uint>(d_gridHash() + _numVertices),
+		thrust::device_ptr<uint>(d_gridIdx()));
+}
+
+void PBD_ClothCuda::FindCellStart_Kernel(void)
+{
+	uint numThreads, numBlocks;
+	ComputeGridSize(_numVertices, 256, numBlocks, numThreads);
+
+	uint smemSize = sizeof(uint) * (numThreads + 1);
+	FindCellStart_D << <numBlocks, numThreads, smemSize >> >
+		(d_gridHash(), d_gridIdx(), d_cellStart(), d_cellEnd(), d_Pos1(), d_Vel(), d_sortedPos(), d_sortedVel(), _numVertices);
+}
+
+void PBD_ClothCuda::UpdateFaceAABB_Kernel(void)
+{
+	uint numThreads, numBlocks;
+	ComputeGridSize(_numFaces, 256, numBlocks, numThreads);
+
+	UpdateFaceAABB << <numBlocks, numThreads >> >
+		(d_faceIdx(), d_Pos1(), d_faceAABB(), _numFaces);
+}
+
+void PBD_ClothCuda::Colide_kernel()
+{
+	uint numThreads, numBlocks;
+	Dvector<REAL> impulse(_numVertices * 3u);
+	impulse.memset(0);
+	ComputeGridSize(_numVertices, 64, numBlocks, numThreads);
+	Colide_PP << <numBlocks, numThreads >> >
+		(d_restPos(), d_Pos1(), d_Pos(), d_sortedVel(), d_Vel(), d_gridHash(), d_gridIdx(), d_cellStart(), d_cellEnd(), impulse(), _thickness, _gridRes, _numVertices, d_flag());
+	
+	ComputeGridSize(_numFaces, 64, numBlocks, numThreads);
+	//Colide_PT << <numBlocks, numThreads >> >
+	//	(d_faceIdx(), d_Pos1(), d_faceAABB(), d_gridHash(), d_gridIdx(), d_cellStart(), d_cellEnd(), impulse(), _thickness, _gridRes, _numFaces, d_flag());
+
+	ComputeGridSize(_numVertices, 64, numBlocks, numThreads);
+	ApplyImpulse_kernel << <numBlocks, numThreads >> >
+		(d_Pos1(), impulse(), _numVertices, _selfColliDamping);
+}
+
+void PBD_ClothCuda::LevelSetCollision_kernel(void)
+{
+	LevelSetCollision_D << <divup(_numVertices, BLOCK_SIZE), BLOCK_SIZE >> >
+		(d_Pos(), d_Vel(), _numVertices);
 }
 
 void PBD_ClothCuda::draw(void)
 {
-	glEnable(GL_LIGHTING);
+	//glDisable(GL_LIGHTING);
+	
 	for (uint i = 0u; i < _numFaces; i++)
 	{
 		uint ino0 = h_faceIdx[i].x;
@@ -290,14 +438,67 @@ void PBD_ClothCuda::draw(void)
 
 		glEnd();
 	}
+
+	//glBegin(GL_POINTS);
+	//glPointSize(5.0f);
+	//for (uint i = 0u; i < _numVertices; i++)
+	//{
+	//	REAL3 a = h_pos[i];
+
+	//	if (h_flag[i])
+	//	{
+	//		glPointSize(100.0f);
+	//		glColor3f(1, 1, 1);
+	//		glVertex3f(a.x, a.y, a.z);
+	//	}
+	//	else
+	//		glColor3f(1, 0, 0);
+	//}
+	//glEnd();
+
+	//glBegin(GL_LINES);
+	//glLineWidth(5.0f);
+
+	//_bendSpring->Draw(h_pos, true);
+	//glEnd();
+	glEnable(GL_LIGHTING);
+}
+
+void PBD_ClothCuda::drawWire(void)
+{
+	glEnable(GL_LIGHTING);
+
+	glBegin(GL_LINES);
+	for (uint i = 0u; i < _numEdges; i++)
+	{
+		uint ino0 = h_edgeIdx[i].x;
+		uint ino1 = h_edgeIdx[i].y;
+		REAL3 a = h_pos[ino0];
+		REAL3 b = h_pos[ino1];
+
+		glNormal3f(h_vNormal[ino0].x, h_vNormal[ino0].y, h_vNormal[ino0].z);
+		glVertex3f(a.x, a.y, a.z);
+		glNormal3f(h_vNormal[ino1].x, h_vNormal[ino1].y, h_vNormal[ino1].z);
+		glVertex3f(b.x, b.y, b.z);
+	}
+	glEnd();
+
 	glEnable(GL_LIGHTING);
 }
 
 void PBD_ClothCuda::InitDeviceMem(void)
 {
+	d_flag.resize(_numVertices);			d_flag.memset(0);
+	d_gridHash.resize(_numVertices);			d_gridHash.memset(0);
+	d_gridIdx.resize(_numVertices);			d_gridIdx.memset(0);
+	d_cellStart.resize(_gridRes * _gridRes * _gridRes);			d_cellStart.memset(0);
+	d_cellEnd.resize(_gridRes * _gridRes * _gridRes);			d_cellEnd.memset(0);
+	d_faceAABB.resize(_numFaces);			d_faceAABB.memset(0);
 	d_faceIdx.resize(_numFaces);			d_faceIdx.memset(0);
+	d_sortedPos.resize(_numVertices);		d_sortedPos.memset(0);
 	d_Pos.resize(_numVertices);				d_Pos.memset(0);
 	d_Pos1.resize(_numVertices);			d_Pos1.memset(0);
+	d_sortedVel.resize(_numVertices);		d_sortedVel.memset(0);
 	d_Vel.resize(_numVertices);				d_Vel.memset(0);
 	d_fNormal.resize(_numFaces);			d_fNormal.memset(0);
 	d_vNormal.resize(_numVertices);		d_vNormal.memset(0);
@@ -306,9 +507,17 @@ void PBD_ClothCuda::InitDeviceMem(void)
 
 void PBD_ClothCuda::FreeDeviceMem(void)
 {
+	d_flag.free();
+	d_gridHash.free();
+	d_gridIdx.free();
+	d_cellStart.free();
+	d_cellEnd.free();
+	d_faceAABB.free();
 	d_faceIdx.free();
+	d_sortedPos.free();
 	d_Pos.free();
 	d_Pos1.free();
+	d_sortedVel.free();
 	d_Vel.free();
 	d_fNormal.free();
 	d_vNormal.free();
@@ -317,6 +526,7 @@ void PBD_ClothCuda::FreeDeviceMem(void)
 
 void	PBD_ClothCuda::copyToDevice(void)
 {
+	d_flag.copyFromHost(h_flag);
 	d_faceIdx.copyFromHost(h_faceIdx);
 	d_Pos.copyFromHost(h_pos);
 	d_Pos1.copyFromHost(h_pos1);
@@ -328,6 +538,7 @@ void	PBD_ClothCuda::copyToDevice(void)
 
 void	PBD_ClothCuda::copyToHost(void)
 {
+	d_flag.copyToHost(h_flag);
 	d_faceIdx.copyToHost(h_faceIdx);
 	d_Pos.copyToHost(h_pos);
 	d_Pos1.copyToHost(h_pos1);
@@ -339,12 +550,12 @@ void	PBD_ClothCuda::copyToHost(void)
 
 void	PBD_ClothCuda::copyNbToDevice(void)
 {
-	d_nbFaces.copyFromHost(h_nbFaces);
+	d_nbFaces.copyFromHost(h_nbVFaces);
 	d_nbVertices.copyFromHost(h_nbVertices);
 }
 
 void	PBD_ClothCuda::copyNbToHost(void)
 {
-	d_nbFaces.copyToHost(h_nbFaces);
+	d_nbFaces.copyToHost(h_nbVFaces);
 	d_nbVertices.copyToHost(h_nbVertices);
 }

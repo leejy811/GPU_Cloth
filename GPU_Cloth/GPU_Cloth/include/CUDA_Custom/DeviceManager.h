@@ -21,7 +21,7 @@ typedef std::chrono::system_clock::time_point ctimer;
 
 #define M_PI				3.14159265359
 
-#if 0
+#if 1
 typedef double				REAL;
 typedef double2				REAL2;
 typedef double3				REAL3;
@@ -114,7 +114,7 @@ struct uint2_CMP
 
 static __inline__ __host__ __device__ bool operator==(const uint2& a, const uint2& b)
 {
-	return a.x == b.x && a.y == b.y;
+	return a.x == b.x && a.y == b.y || a.x == b.y && a.y == b.x;
 }
 //-------------------------------------------------------------------------------------------------------------
 class StreamParam

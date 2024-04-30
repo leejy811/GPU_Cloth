@@ -24,6 +24,8 @@ public:		//Host
 	vector<uint2> h_GraphIdx;
 	vector<REAL> h_RestLength;
 	PrefixArray<uint> h_ColorIdx;
+	PrefixArray<uint> h_nbCEdges;
+	PrefixArray<uint> h_nbGVertices;
 public:	//const
 	uint _numConstraint;
 	uint _numColor;
@@ -40,8 +42,9 @@ public:
 	}
 	~Constraint();
 public:		//Init
-	void Init(void);
-	void InitGraphEdge(void);
+	void Init(int numVertices);
+	void InitGraphEdge(int numVertices);
+	void InitGraphAdjacency();
 	void InitConstraintColor(void);
 public:		//Update
 	void IterateConstraint(Dvector<REAL3>& pos1, Dvector<REAL>& invm);
@@ -51,6 +54,9 @@ public:		//Cuda
 	void	copyToDevice(void);
 	void	copyToHost(void);
 	void FreeDeviceMem(void);
+
+	vector<bool> colorEdges;
+	void Draw(vector<REAL3>& pos, bool isBend);
 };
 
 #endif
