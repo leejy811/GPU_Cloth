@@ -9,6 +9,11 @@
 #include "CUDA_Custom/PrefixArray.h"
 #include "thrust/sort.h"
 #include "Constraint.h"
+#include "Vertex.h"
+#include "Face.h"
+#include "Device_Hash.h"
+#include "Mesh.h"
+#include "Parameter.h"
 #include <GL/freeglut.h>
 #include <vector>
 #include <fstream>
@@ -20,91 +25,40 @@ using namespace std;
 
 class PBD_ClothCuda
 {
-public:		//Device
-	Dvector<BOOL> d_flag;
-	Dvector<uint> d_gridHash;
-	Dvector<uint> d_gridIdx;
-	Dvector<uint> d_cellStart;
-	Dvector<uint> d_cellEnd;
-	Dvector<uint3> d_faceIdx;
-	Dvector<AABB> d_faceAABB;
-	Dvector<REAL3> d_sortedPos;
-	Dvector<REAL3> d_restPos;
-	Dvector<REAL3> d_Pos;
-	Dvector<REAL3> d_Pos1;
-	Dvector<REAL3> d_sortedVel;
-	Dvector<REAL3> d_Vel;
-	Dvector<REAL3> d_fNormal;
-	Dvector<REAL3> d_vNormal;
-	Dvector<REAL> d_InvMass;
-	DPrefixArray<uint> d_nbFaces;
-	DPrefixArray<uint> d_nbVertices;
-public:		//Host
-	vector<BOOL> h_flag;
-	vector<uint3> h_faceIdx;
-	vector<uint2> h_edgeIdx;
-	vector<REAL3> h_pos;
-	vector<REAL3> h_pos1;
-	vector<REAL3> h_vel;
-	vector<REAL3> h_fNormal;
-	vector<REAL3> h_vNormal;
-	vector<REAL> h_invMass;
-	PrefixArray<uint> h_nbEFaces;
-	PrefixArray<uint> h_nbVFaces;
-	PrefixArray<uint> h_nbVertices;
-	PrefixArray<uint> h_nbEVertices;
-public:	
-	uint _numVertices;
-	uint _numEdges;
-	uint _numFaces;
-	uint _iteration;
-	uint _gridRes;
-	REAL _gridSize;
-	REAL _thickness;
-	REAL _linearDamping;
-	REAL _selfColliDamping;
-	REAL _springK;
-	REAL3 _externalForce;
+public:
+	//Parameter
+	ClothParam _param;
 	AABB _boundary;
 public:	//Constraint
 	Constraint* _strechSpring;
 	Constraint* _bendSpring;
+public:	//Mesh
+	Vertex* d_Vertex;
+	Face* d_Face;
+	Device_Hash* d_Hash;
+	Mesh* h_Mesh;
 public:
 	PBD_ClothCuda();
-	PBD_ClothCuda(char* filename, uint iter, REAL liDamp, REAL stiff, uint grid, REAL thick, REAL selfDamp)
-		: _iteration(iter), _linearDamping(liDamp), _springK(stiff), _gridRes(grid), _thickness(thick), _selfColliDamping(selfDamp)
+	PBD_ClothCuda(char* filename, REAL gravity, REAL dt)
 	{
-		LoadObj(filename);
-		Init();
+		InitParam(gravity, dt);
+		Init(filename);
 	}
 	~PBD_ClothCuda();
 public:		//init
-	void Init();
-	void LoadObj(char* filename);
-	void moveCenter(REAL scale);
-	void buildAdjacency(void);
-	void buildAdjacency_VF(void);
-	void buildAdjacency_EF(void);
+	void Init(char* filename);
+	void InitParam(REAL gravity, REAL dt);
 	void buildConstraint(void);
-	void buildGraph(void);
-	void buildEdges(void);
-	void computeNormal(void);
-	void SetMass(void);
 public:		//Update
-	void ComputeExternalForce_kernel(REAL3& extForce, REAL dt);
+	void ComputeGravity_kernel(void);
 	void ComputeWind_kernel(REAL3 wind);
-	void Intergrate_kernel(REAL dt);
+	void Intergrate_kernel(void);
 	void ComputeFaceNormal_kernel(void);
 	void ComputeVertexNormal_kernel(void);
 	void ProjectConstraint_kernel(void);
 	void SetHashTable_kernel(void);
 	void UpdateFaceAABB_Kernel(void);
 	void Colide_kernel();
-public:		//Hash
-	void CalculateHash_Kernel(void);
-	void SortParticle_Kernel(void);
-	void FindCellStart_Kernel(void);
-
 	void LevelSetCollision_kernel(void);
 public:
 	void draw(void);
@@ -113,8 +67,6 @@ public:		//Cuda
 	void InitDeviceMem(void);
 	void copyToDevice(void);
 	void copyToHost(void);
-	void copyNbToDevice(void);
-	void copyNbToHost(void);
 	void FreeDeviceMem(void);
 	void ComputeGridSize(uint n, uint blockSize, uint& numBlocks, uint& numThreads)
 	{

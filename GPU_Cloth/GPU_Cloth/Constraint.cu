@@ -17,6 +17,8 @@ void Constraint::Init(int numVertices)
 	InitGraphEdge(numVertices);
 	InitGraphAdjacency();
 	InitConstraintColor();
+
+	cudaMemcpyToSymbol(&constParam, &_param, sizeof(ConstParam));
 }
 
 void Constraint::InitGraphEdge(int numVertices)
@@ -35,7 +37,7 @@ void Constraint::InitGraphEdge(int numVertices)
 
 void Constraint::InitGraphAdjacency()
 {
-	vector<set<uint>> nbVs(_numConstraint);
+	vector<set<uint>> nbVs(_param._numConstraint);
 
 	for (int i = 0; i < h_GraphIdx.size(); i++)
 	{
@@ -48,9 +50,9 @@ void Constraint::InitGraphAdjacency()
 
 void Constraint::InitConstraintColor(void)
 {
-	vector<uint> v(_numConstraint);
+	vector<uint> v(_param._numConstraint);
 
-	for (int i = 1; i < _numConstraint; i++)
+	for (int i = 1; i < _param._numConstraint; i++)
 	{
 		set<uint> neighbours;
 
@@ -71,62 +73,35 @@ void Constraint::InitConstraintColor(void)
 		v[i] = smallest;
 	}
 
-	_numColor = *max_element(v.begin(), v.end()) + 1;
-	vector<set<uint>> graph(_numColor);
-	for (int i = 0; i < _numConstraint; i++)
+	_param._numColor = *max_element(v.begin(), v.end()) + 1;
+	vector<set<uint>> graph(_param._numColor);
+	for (int i = 0; i < _param._numConstraint; i++)
 	{
 		graph[v[i]].insert(i);
 	}
 
 	h_ColorIdx.init(graph);
-
-	int count = 0;
-
-	colorEdges.resize(_numConstraint, false);
-	for (int i = 0; i < _numColor; i++)
-	{
-		uint numConst = h_ColorIdx._index[i + 1] - h_ColorIdx._index[i];
-		for (int j = 0; j < numConst; j++)
-		{
-			for (int k = j + 1; k < numConst; k++)
-			{
-				uint eid0 = h_ColorIdx._array[h_ColorIdx._index[i] + j];
-				uint eid1 = h_ColorIdx._array[h_ColorIdx._index[i] + k];
-				uint2 e0 = h_EdgeIdx[eid0];
-				uint2 e1 = h_EdgeIdx[eid1];
-
-				if (e0.x == e1.x || e0.x == e1.y || e0.y == e1.x || e0.y == e1.y)
-				{
-					colorEdges[eid0] = true;
-					colorEdges[eid1] = true;
-					count += 2;
-				}
-			}
-		}
-	}
-
-	printf("%d / %d\n", count, _numConstraint);
 }
 
-void Constraint::IterateConstraint(Dvector<REAL3>& pos1, Dvector<REAL>& invm)
+void Constraint::IterateConstraint(Vertex vertex)
 {
-	for (int i = 0; i < _numColor; i++)
+	for (int i = 0; i < _param._numColor; i++)
 	{
 		uint numConst = h_ColorIdx._index[i + 1] - h_ColorIdx._index[i];
-		SolveDistanceConstraint_kernel(numConst, i, pos1, invm);
+		SolveDistanceConstraint_kernel(numConst, i, vertex);
 	}
 }
 
-void Constraint::SolveDistanceConstraint_kernel(uint numConst, uint idx, Dvector<REAL3>& pos1, Dvector<REAL>& invm)
+void Constraint::SolveDistanceConstraint_kernel(uint numConst, uint idx, Vertex vertex)
 {
 	SolveDistConstraint_kernel << <divup(numConst, CONST_BLOCK_SIZE), CONST_BLOCK_SIZE >> >
-		(pos1(), invm(), d_EdgeIdx(), d_RestLength(), d_ColorIdx._array(), d_ColorIdx._index(), _springK, _iteration, idx, numConst);
+		(vertex, d_EdgeIdx(), d_RestLength(), d_ColorIdx._array(), d_ColorIdx._index(), idx, numConst);
 }
 
 void Constraint::InitDeviceMem(void)
 {
-	d_EdgeIdx.resize(_numConstraint);				d_EdgeIdx.memset(0);
-	d_RestLength.resize(_numConstraint);		d_RestLength.memset(0);
+	d_EdgeIdx.resize(_param._numConstraint);		d_EdgeIdx.memset(0);
+	d_RestLength.resize(_param._numConstraint);		d_RestLength.memset(0);
 }
 
 void	Constraint::copyToDevice(void)
@@ -148,53 +123,4 @@ void Constraint::FreeDeviceMem(void)
 	d_EdgeIdx.free();
 	d_RestLength.free();
 	d_ColorIdx.clear();
-}
-
-void Constraint::Draw(vector<REAL3>& pos, bool isBend)
-{
-	/*for (int i = 0; i < _numColor; i++)
-	{
-		uint numConst = h_ColorIdx._index[i + 1] - h_ColorIdx._index[i];
-		for (int j = 0; j < numConst; j++)
-		{
-			uint eid = h_ColorIdx._array[h_ColorIdx._index[i] + j];
-			uint ino0 = h_EdgeIdx[eid].x;
-			uint ino1 = h_EdgeIdx[eid].y;
-			REAL3 a = pos[ino0];
-			REAL3 b = pos[ino1];
-
-			if (i == 2)
-				glColor3f(1, 0, 0);
-			else
-				glColor3f(0, 1, 0);
-
-			glVertex3f(a.x, a.y, a.z);
-			glVertex3f(b.x, b.y, b.z);
-		}
-	}*/
-
-	for (int i = 0; i < _numConstraint; i++)
-	{
-		uint ino0 = h_EdgeIdx[i].x;
-		uint ino1 = h_EdgeIdx[i].y;
-		REAL3 a = pos[ino0];
-		REAL3 b = pos[ino1];
-
-		if (isBend)
-		{
-			if (colorEdges[i] && Length(a - b) > 0.5)
-				glColor3f(1, 0, 0);
-			else
-				glColor3f(0, 1, 0);
-
-			glVertex3f(a.x, a.y, a.z);
-			glVertex3f(b.x, b.y, b.z);
-		}
-		else
-		{
-			glColor3f(0, 1, 0);
-			glVertex3f(a.x, a.y, a.z);
-			glVertex3f(b.x, b.y, b.z);
-		}
-	}
 }
