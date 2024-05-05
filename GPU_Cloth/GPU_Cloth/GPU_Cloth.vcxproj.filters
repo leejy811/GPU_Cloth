@@ -12,11 +12,32 @@
     <ClCompile Include="main.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
+    <ClCompile Include="Face.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="Vertex.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="PBD_ObjectCloth.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
     <ClCompile Include="Engine.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Vec3.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="Face.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="Vertex.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="PBD_ObjectCloth.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
     <ClInclude Include="PBD_ClothCuda.cuh">
       <Filter>헤더 파일</Filter>
     </ClInclude>
@@ -32,42 +53,12 @@
     <ClInclude Include="Constraint.cuh">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="Vertex.h">
-      <Filter>헤더 파일</Filter>
-    </ClInclude>
-    <ClInclude Include="Face.h">
-      <Filter>헤더 파일</Filter>
-    </ClInclude>
-    <ClInclude Include="Device_Hash.h">
-      <Filter>헤더 파일</Filter>
-    </ClInclude>
-    <ClInclude Include="Device_Hash.cuh">
-      <Filter>헤더 파일</Filter>
-    </ClInclude>
-    <ClInclude Include="Mesh.h">
-      <Filter>헤더 파일</Filter>
-    </ClInclude>
-    <ClInclude Include="Parameter.h">
-      <Filter>헤더 파일</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="PBD_ClothCuda.cu">
       <Filter>소스 파일</Filter>
     </CudaCompile>
     <CudaCompile Include="Constraint.cu">
-      <Filter>소스 파일</Filter>
-    </CudaCompile>
-    <CudaCompile Include="Vertex.cu">
-      <Filter>소스 파일</Filter>
-    </CudaCompile>
-    <CudaCompile Include="Face.cu">
-      <Filter>소스 파일</Filter>
-    </CudaCompile>
-    <CudaCompile Include="Device_Hash.cu">
-      <Filter>소스 파일</Filter>
-    </CudaCompile>
-    <CudaCompile Include="Mesh.cu">
       <Filter>소스 파일</Filter>
     </CudaCompile>
   </ItemGroup>

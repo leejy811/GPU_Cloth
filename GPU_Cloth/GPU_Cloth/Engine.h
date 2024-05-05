@@ -12,19 +12,19 @@ public:
 public:
 	AABB			_boundary;
 public:
-	REAL			_gravity;
+	REAL3			_gravity;
 	REAL			_dt;
 	REAL			_invdt;
 	uint			_frame;
 public:
 	Engine() {}
-	Engine(REAL gravity, REAL dt, char* filename, uint num)
+	Engine(REAL3& gravity, REAL dt, char* filename, uint num)
 	{
 		init(gravity, dt, filename, num);
 	}
 	~Engine() {}
 public:
-	void	init(REAL gravity, REAL dt, char* filename, uint num);
+	void	init(REAL3& gravity, REAL dt, char* filename, uint num);
 public:
 	void	simulation(void);
 	void	reset(void);

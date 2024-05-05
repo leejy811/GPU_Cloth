@@ -1,6 +1,6 @@
 #include "Engine.h"
 
-void Engine::init(REAL gravity, REAL dt, char* filename, uint num)
+void Engine::init(REAL3& gravity, REAL dt, char* filename, uint num)
 {
 	_gravity = gravity;
 	_dt = dt;
@@ -11,7 +11,7 @@ void Engine::init(REAL gravity, REAL dt, char* filename, uint num)
 
 	for (int i = 0; i < num; i++)
 	{
-		_cloths.push_back(new PBD_ClothCuda(filename, _gravity, _dt));
+		_cloths.push_back(new PBD_ClothCuda(filename, 10, 0.99, 0.9, 128, 0.04, 0.1));
 	}
 	_frame = 0u;
 }
@@ -20,16 +20,19 @@ void	Engine::simulation(void)
 {
 	for (auto cloth : _cloths)
 	{
-		for (int i = 0; i < cloth->_param._iteration; i++)
+		double subDt = _dt / cloth->_iteration;
+		double subInvDt = 1.0 / subDt;
+
+		for (int i = 0; i < cloth->_iteration; i++)
 		{
 			cloth->ComputeFaceNormal_kernel();
 			cloth->ComputeVertexNormal_kernel();
-			cloth->ComputeGravity_kernel();
+			cloth->ComputeExternalForce_kernel(_gravity, subDt);
 			cloth->ProjectConstraint_kernel();
 			cloth->SetHashTable_kernel();
 			cloth->UpdateFaceAABB_Kernel();
 			cloth->Colide_kernel();
-			cloth->Intergrate_kernel();
+			cloth->Intergrate_kernel(subInvDt);
 			cloth->LevelSetCollision_kernel();
 		}
 		cloth->copyToHost();

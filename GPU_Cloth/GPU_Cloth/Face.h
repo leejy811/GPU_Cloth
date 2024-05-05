@@ -2,37 +2,31 @@
 #define __FACE_H__
 
 #pragma once
-#include "cuda_runtime.h"
-#include "device_launch_parameters.h"
-#include "CUDA_Custom/DeviceManager.h"
-#include "CUDA_Custom/Dvector.h"
-#include "CUDA_Custom/PrefixArray.h"
-#include "Mesh.h"
+#include "Vertex.h"
 #include <vector>
 
 using namespace std;
 
 class Face
 {
-public:		//Device
-	Dvector<uint3> d_faceIdx;
-	Dvector<AABB> d_faceAABB;
-	Dvector<REAL3> d_fNormal;
-public:		//Host
-	vector<uint3> h_faceIdx;
-	vector<REAL3> h_fNormal;
+public:
+	int				_index;
+	Vec3<double>	_normal;
+	vector<Vertex*>	_vertices; // Triangle : num. vertex -> 3
+	vector<double>	_structuralLength; // 0 : 0-1, 1 : 1-2, 2 : 0-2
+	vector<double>	_bendLength;
 public:
 	Face();
-	Face(const Mesh& mesh)
+	Face(int index, Vertex* v0, Vertex* v1, Vertex* v2)
 	{
-		copyHostValue(mesh);
+		_index = index;
+		_vertices.push_back(v0);
+		_vertices.push_back(v1);
+		_vertices.push_back(v2);
 	}
 	~Face();
 public:
-	void InitDeviceMem(uint numFace);
-	void copyToDevice(void);
-	void copyHostValue(const Mesh& mesh);
-	void FreeDeviceMem(void);
+	int		getIndex(Vertex* v);
 };
 
 #endif

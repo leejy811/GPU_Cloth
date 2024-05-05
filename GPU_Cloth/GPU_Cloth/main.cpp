@@ -2,6 +2,7 @@
 #include <iostream>
 #include "GL\glut.h"
 #include "Engine.h"
+#include "PBD_ObjectCloth.h"
 #include <ctime>
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,13 +23,26 @@ bool simulation = false;
 int frame = 0, curTime, timebase = 0;
 
 Engine* _engine;
+vector<PBD_ObjectCloth*> _pbd;
+
+#define CUDA 1
 
 bool MODE = true;
 
 void Init(void)
 {
 	glEnable(GL_DEPTH_TEST);
-	_engine = new Engine(-9.81, 0.01, "OBJ\\lowPlane.obj", 1);
+	if (CUDA)
+	{
+		_engine = new Engine(make_REAL3(0.0, -9.81, 0.0), 0.01, "OBJ\\dragon.obj", 1);
+	}
+	else
+	{
+		for (int i = 0; i < 1; i++)
+		{
+			_pbd.push_back(new PBD_ObjectCloth("OBJ\\Bunny_Close.obj"));
+		}
+	}
 }
 
 void Draw(void)
@@ -36,10 +50,20 @@ void Draw(void)
 	glEnable(GL_LIGHTING);
 	glEnable(GL_LIGHT0);
 
-	if (MODE)
-		_engine->draw();
+	if (CUDA)
+	{
+		if (MODE)
+			_engine->draw();
+		else
+			_engine->drawWire();
+	}
 	else
-		_engine->drawWire();
+	{
+		for (auto pbd : _pbd)
+		{
+			pbd->drawSolid();
+		}
+	}
 
 	glDisable(GL_LIGHTING);
 }
@@ -99,7 +123,17 @@ void Update(void)
 			printf("FPS : %f\n", fps);
 		}
 
-		_engine->simulation();
+		if (CUDA)
+		{
+			_engine->simulation();
+		}
+		else
+		{
+			for (auto pbd : _pbd)
+			{
+				pbd->simulation(0.01);
+			}
+		}
 	}
 	::glutPostRedisplay();
 }
@@ -207,7 +241,17 @@ void Keyboard(unsigned char key, int x, int y)
 		break;
 	case 'f':
 	case 'F':
-		_engine->ApplyWind(make_REAL3(-0.5, -0.25, -0.25));
+		if (CUDA)
+		{
+			_engine->ApplyWind(make_REAL3(-0.5, -0.25, -0.25));
+		}
+		else
+		{
+			for (auto pbd : _pbd)
+			{
+				pbd->applyWind(vec3(-0.5, -0.25, -0.25));
+			}
+		}
 		break;
 	case 't':
 	case 'T':
@@ -226,7 +270,7 @@ int main(int argc, char** argv)
 	glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH);
 	glutInitWindowSize(width, height);
 	glutInitWindowPosition(100, 100);
-	glutCreateWindow("GPU Based PBD");
+	glutCreateWindow("Position Based Dynamics");
 	glutDisplayFunc(Display);
 	glutReshapeFunc(Reshape);
 	glutIdleFunc(Update);
