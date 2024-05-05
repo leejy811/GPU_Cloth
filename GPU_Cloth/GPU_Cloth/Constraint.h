@@ -7,6 +7,8 @@
 #include "CUDA_Custom/DeviceManager.h"
 #include "CUDA_Custom/Dvector.h"
 #include "CUDA_Custom/PrefixArray.h"
+#include "Vertex.h"
+#include "Parameter.h"
 #include <vector>
 
 #define CONST_BLOCK_SIZE 32
@@ -27,18 +29,15 @@ public:		//Host
 	PrefixArray<uint> h_nbCEdges;
 	PrefixArray<uint> h_nbGVertices;
 public:	//const
-	uint _numConstraint;
-	uint _numColor;
-	uint _iteration;
-	REAL _springK;
+	ConstParam _param;
 public:
 	Constraint();
 	Constraint(uint iter, REAL stiff)
 	{
-		_iteration = iter;
-		_springK = stiff;
-		_numConstraint = 0;
-		_numColor = 0;
+		_param._iteration = iter;
+		_param._springK = stiff;
+		_param._numConstraint = 0;
+		_param._numColor = 0;
 	}
 	~Constraint();
 public:		//Init
@@ -47,16 +46,13 @@ public:		//Init
 	void InitGraphAdjacency();
 	void InitConstraintColor(void);
 public:		//Update
-	void IterateConstraint(Dvector<REAL3>& pos1, Dvector<REAL>& invm);
-	void SolveDistanceConstraint_kernel(uint numConst, uint idx, Dvector<REAL3>& pos1, Dvector<REAL>& invm);
+	void IterateConstraint(REAL3* pos, REAL* invm);
+	void SolveDistanceConstraint_kernel(uint numConst, uint idx, REAL3* pos, REAL* invm);
 public:		//Cuda
 	void InitDeviceMem(void);
 	void	copyToDevice(void);
 	void	copyToHost(void);
 	void FreeDeviceMem(void);
-
-	vector<bool> colorEdges;
-	void Draw(vector<REAL3>& pos, bool isBend);
 };
 
 #endif

@@ -1,39 +1,36 @@
 #ifndef __VERTEX_H__
 #define __VERTEX_H__
+
 #pragma once
-#include "Vec3.h"
+#include "cuda_runtime.h"
+#include "device_launch_parameters.h"
+#include "CUDA_Custom/DeviceManager.h"
+#include "CUDA_Custom/Dvector.h"
+#include "CUDA_Custom/PrefixArray.h"
+#include "Mesh.h"
 #include <vector>
 
 using namespace std;
 
-class Face;
 class Vertex
 {
-public:
-	int				_index;
-	Vec3<double>	_pos; // X,Y,Z
-	Vec3<double>	_pos1; // X,Y,Z
-	Vec3<double>	_normal;
-	Vec3<double> _vel;
-	double	_invMass;
-	vector<Face*>	_nbFaces; // Neighbor face
-	vector<Vertex*>	_nbVertices; // Neighbor vertex
+public:		//Device
+	REAL3* d_restPos;
+	REAL3* d_Pos;
+	REAL3* d_Pos1;
+	REAL3* d_Vel;
+	REAL3* d_vNormal;
+	REAL* d_InvMass;
+	DPrefixArray<uint> d_nbFaces;
+	DPrefixArray<uint> d_nbVertices;
 public:
 	Vertex();
-	Vertex(int index, Vec3<double> pos, Vec3<double> vel, double invMass)
-	{
-		_index = index;
-		_pos = pos;
-		_vel = vel;
-		_invMass = invMass;
-	}
 	~Vertex();
 public:
-	inline double x(void) { return _pos.x(); }
-	inline double y(void) { return _pos.y(); }
-	inline double z(void) { return _pos.z(); }
-public:
-	bool	hasNbVertex(Vertex* v);
+	void InitDeviceMem(uint numVertex);
+	void copyToDevice(const Mesh& mesh);
+	void copyToHost(Mesh& mesh);
+	void FreeDeviceMem(void);
 };
 
 #endif

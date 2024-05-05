@@ -80,27 +80,30 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Engine.cpp" />
-    <ClCompile Include="Face.cpp" />
     <ClCompile Include="main.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
     </ClCompile>
-    <ClCompile Include="PBD_ObjectCloth.cpp" />
-    <ClCompile Include="Vertex.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Constraint.cuh" />
     <ClInclude Include="Constraint.h" />
+    <ClInclude Include="Device_Hash.cuh" />
+    <ClInclude Include="Device_Hash.h" />
     <ClInclude Include="Engine.h" />
     <ClInclude Include="Face.h" />
+    <ClInclude Include="Mesh.h" />
+    <ClInclude Include="Parameter.h" />
     <ClInclude Include="PBD_ClothCuda.cuh" />
     <ClInclude Include="PBD_ClothCuda.h" />
-    <ClInclude Include="PBD_ObjectCloth.h" />
-    <ClInclude Include="Vec3.h" />
     <ClInclude Include="Vertex.h" />
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="Constraint.cu" />
+    <CudaCompile Include="Device_Hash.cu" />
+    <CudaCompile Include="Face.cu" />
+    <CudaCompile Include="Mesh.cu" />
     <CudaCompile Include="PBD_ClothCuda.cu" />
+    <CudaCompile Include="Vertex.cu" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

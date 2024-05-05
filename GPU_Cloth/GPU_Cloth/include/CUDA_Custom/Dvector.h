@@ -191,14 +191,14 @@ public:
 	{
 		return _list;
 	}
-	/*__inline__ __host__ __device__ */
-	/*inline T& operator[](size_t i) {
+	__inline__ __host__ __device__
+	inline T& operator[](size_t i) {
 		if (i >= _size) {
 			printf("Error : Dvector_[] : index out\n");
 			exit(1);
 		}
 		return _list[i];
-	}*/
+	}
 };
 
 Dvector<REAL> operator+(const Dvector<REAL>& a, const REAL b);

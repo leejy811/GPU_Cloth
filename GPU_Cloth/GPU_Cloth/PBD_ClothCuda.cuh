@@ -1,132 +1,116 @@
 #include "PBD_ClothCuda.h"
 #include "include/CUDA_Custom/DeviceManager.cuh"
-#include <cooperative_groups.h>
 
-namespace cg = cooperative_groups;
+__constant__ ClothParam clothParam;
 
-__global__ void CompExternlaForce_kernel(REAL3* pos, REAL3* pos1, REAL3* vel, REAL* invm, REAL3 gravity, REAL3 ext, REAL damp, uint numVer, REAL dt, REAL thickness)
+__global__ void CompGravity_kernel(Vertex ver)
 {
 	uint idx = threadIdx.x + blockDim.x * blockIdx.x;
 
-	if (idx >= numVer)
+	if (idx >= clothParam._numVertices)
 		return;
 
-	REAL3 v = vel[idx];
-	v += gravity * dt;
-	v += ext * invm[idx] * dt;
-	v *= damp;
-	vel[idx] = v;
+	REAL3 v = ver.d_Vel[idx];
+	REAL3 gravity = make_REAL3(0.0, clothParam._gravity, 0.0);
+	v += gravity * clothParam._subdt;
+	v *= clothParam._linearDamping;
+	ver.d_Vel[idx] = v;
 
-	REAL invdt = 1.0 / dt;
-	REAL speed = Length(vel[idx]);
-	REAL maxSpeed = thickness * invdt;
-
-	if (speed > maxSpeed)
-		vel[idx] *= (maxSpeed / speed);
-
-	pos1[idx] = pos[idx] + (vel[idx] * dt);
+	ver.d_Pos1[idx] = ver.d_Pos[idx] + (ver.d_Vel[idx] * clothParam._subdt);
 }
 
-__global__ void CompWind_kernel(uint3* fIdx, REAL3* pos1, REAL3* vel, REAL3 wind, uint numFace)
+__global__ void CompWind_kernel(Face face, Vertex ver, REAL3 wind)
 {
 	uint idx = threadIdx.x + blockDim.x * blockIdx.x;
 
-	if (idx >= numFace)
+	if (idx >= clothParam._numFaces)
 		return;
 
-	uint iv0 = fIdx[idx].x;
-	uint iv1 = fIdx[idx].y;
-	uint iv2 = fIdx[idx].z;
+	uint iv0 = face.d_faceIdx[idx].x;
+	uint iv1 = face.d_faceIdx[idx].y;
+	uint iv2 = face.d_faceIdx[idx].z;
 
-	REAL3 v0 = pos1[iv0];
-	REAL3 v1 = pos1[iv1];
-	REAL3 v2 = pos1[iv2];
+	REAL3 v0 = ver.d_Pos1[iv0];
+	REAL3 v1 = ver.d_Pos1[iv1];
+	REAL3 v2 = ver.d_Pos1[iv2];
 
 	REAL3 normal = Cross(v1 - v0, v2 - v0);
 	Normalize(normal);
 	REAL3 force = normal * Dot(normal, wind);
-	vel[iv0] += force;
-	vel[iv1] += force;
-	vel[iv2] += force;
+	ver.d_Vel[iv0] += force;
+	ver.d_Vel[iv1] += force;
+	ver.d_Vel[iv2] += force;
 }
 
-__global__ void CompIntergrate_kernel(REAL3* pos, REAL3* pos1, REAL3* vel, uint numVer, REAL thickness, REAL invdt)
+__global__ void CompIntergrate_kernel(Vertex ver)
 {
 	int idx = threadIdx.x + blockDim.x * blockIdx.x;
 
-	if (idx >= numVer)
+	if (idx >= clothParam._numVertices)
 		return;
 
-	//if (pos1[idx].y > 0.9   && pos1[idx].x > 0.9)
+	//if (ver.d_Pos1[idx].y > 0.9   && ver.d_Pos1[idx].x > 0.9)
 	//	return;
 
-	vel[idx] = (pos1[idx] - pos[idx]) * invdt;
+	ver.d_Vel[idx] = (ver.d_Pos1[idx] - ver.d_Pos[idx]) * clothParam._subInvdt;
 
-	REAL speed = Length(vel[idx]);
-	REAL maxSpeed = thickness * invdt;
+	REAL speed = Length(ver.d_Vel[idx]);
+	REAL maxSpeed = clothParam._thickness * clothParam._subInvdt;
 
 	if (speed > maxSpeed)
-		vel[idx] *= (maxSpeed / speed);
+		ver.d_Vel[idx] *= (maxSpeed / speed);
 
-	REAL dt = 1.0 / invdt;
-	pos[idx] += vel[idx] * dt;
+	REAL dt = 1.0 / clothParam._subInvdt;
+	ver.d_Pos[idx] += ver.d_Vel[idx] * dt;
 
-	//pos[idx] = pos1[idx];
-
-	//if (pos[idx].x > 1.0)	pos[idx].x = 1.0;
-	//if (pos[idx].y > 1.0)	pos[idx].y = 1.0;
-	//if (pos[idx].z > 1.0)	pos[idx].z = 1.0;
-
-	//if (pos[idx].x < -1.0)	pos[idx].x = -1.0;
-	//if (pos[idx].y < -1.0)	pos[idx].y = -1.0;
-	//if (pos[idx].z < -1.0)	pos[idx].z = -1.0;
+	//ver.d_Pos[idx] = ver.d_Pos1[idx];
 }
 
-__global__ void CompFaceNorm_kernel(uint3* fIdx, REAL3* pos, REAL3* fNorm, uint numFace)
+__global__ void CompFaceNorm_kernel(Face face, Vertex ver)
 {
 	uint idx = threadIdx.x + blockDim.x * blockIdx.x;
 
-	if (idx >= numFace)
+	if (idx >= clothParam._numFaces)
 		return;
 
-	uint iv0 = fIdx[idx].x;
-	uint iv1 = fIdx[idx].y;
-	uint iv2 = fIdx[idx].z;
+	uint iv0 = face.d_faceIdx[idx].x;
+	uint iv1 = face.d_faceIdx[idx].y;
+	uint iv2 = face.d_faceIdx[idx].z;
 
-	REAL3 v0 = pos[iv0];
-	REAL3 v1 = pos[iv1];
-	REAL3 v2 = pos[iv2];
+	REAL3 v0 = ver.d_Pos[iv0];
+	REAL3 v1 = ver.d_Pos[iv1];
+	REAL3 v2 = ver.d_Pos[iv2];
 
 	REAL3 norm = Cross(v1 - v0, v2 - v0);
 	Normalize(norm);
-	fNorm[idx] = norm;
+	face.d_fNormal[idx] = norm;
 }
 
-__global__ void CompVertexNorm_kernel(uint* nbFIdx, uint* nbFArray, REAL3* fNorm, REAL3* vNorm, uint numVer)
+__global__ void CompVertexNorm_kernel(Face face, Vertex ver)
 {
 	uint idx = threadIdx.x + blockDim.x * blockIdx.x;
 
-	if (idx >= numVer)
+	if (idx >= clothParam._numVertices)
 		return;
 
-	uint numNbFaces = nbFIdx[idx + 1] - nbFIdx[idx];
+	uint numNbFaces = ver.d_nbFaces._index[idx + 1] - ver.d_nbFaces._index[idx];
 
 	for (int i = 0; i < numNbFaces; i++)
 	{
-		uint fIdx = nbFArray[nbFIdx[idx] + i];
-		vNorm[idx] += fNorm[fIdx];
+		uint fIdx = ver.d_nbFaces._array[ver.d_nbFaces._index[idx] + i];
+		ver.d_vNormal[idx] += face.d_fNormal[fIdx];
 	}
-	vNorm[idx] /= numNbFaces;
-	Normalize(vNorm[idx]);
+	ver.d_vNormal[idx] /= numNbFaces;
+	Normalize(ver.d_vNormal[idx]);
 }
 
-__device__ int3 calcGridPos(REAL3 pos, REAL gridSize)
+__device__ int3 calculateGridPos(REAL3 pos, REAL gridSize)
 {
 	int3 intPos = make_int3(floorf(pos.x / gridSize), floorf(pos.y / gridSize), floorf(pos.z / gridSize));
 	return intPos;
 }
 
-__device__ uint calcGridHash(int3 pos, uint gridRes)
+__device__ uint calculateGridHash(int3 pos, uint gridRes)
 {
 	pos.x = pos.x &
 		(gridRes - 1);  // wrap grid, assumes size is power of 2
@@ -137,151 +121,15 @@ __device__ uint calcGridHash(int3 pos, uint gridRes)
 		__umul24(pos.y, gridRes) + pos.x;
 }
 
-__global__ void CalculateHash_D(uint* gridHash, uint* gridIdx, REAL3* pos, uint gridRes, uint numVer)
+__global__ void Colide_PP(Vertex ver, Device_Hash hash, REAL* impulse)
 {
 	uint idx = threadIdx.x + blockDim.x * blockIdx.x;
 
-	if (idx >= numVer)
+	if (idx >= clothParam._numVertices)
 		return;
 
-	REAL cellSize = 1.0 / gridRes;
-	int3 gridPos = calcGridPos(pos[idx], cellSize);
-	uint hash = calcGridHash(gridPos, gridRes);
-
-	gridHash[idx] = hash;
-	gridIdx[idx] = idx;
-}
-
-__global__ void FindCellStart_D(uint* gridHash, uint* gridIdx, uint* cellStart, uint* cellEnd, REAL3* pos, REAL3* vel, REAL3* sortedPos, REAL3* sortedVel, uint numParticles)
-{
-	cg::thread_block cta = cg::this_thread_block();
-	extern __shared__ uint sharedHash[];
-	uint idx = threadIdx.x + blockDim.x * blockIdx.x;
-	uint hash;
-
-	if (idx < numParticles)
-	{
-		hash = gridHash[idx];
-		sharedHash[threadIdx.x + 1] = hash;
-
-		if (idx > 0 && threadIdx.x == 0)
-		{
-			sharedHash[0] = gridHash[idx - 1];
-		}
-	}
-
-	cg::sync(cta);
-
-	if (idx < numParticles)
-	{
-
-		if (idx == 0 || hash != sharedHash[threadIdx.x])
-		{
-			cellStart[hash] = idx;
-
-			if (idx > 0) cellEnd[sharedHash[threadIdx.x]] = idx;
-		}
-
-		if (idx == numParticles - 1)
-		{
-			cellEnd[hash] = idx + 1;
-		}
-
-		uint sortedIndex = gridIdx[idx];
-		REAL3 newPos = pos[sortedIndex];
-		REAL3 newVel = vel[sortedIndex];
-
-		sortedPos[idx] = newPos;
-		sortedVel[idx] = newVel;
-	}
-}
-
-__device__ REAL3 ColideSphere(REAL3 restPosA, REAL3 restPosB, REAL3 posA, REAL3 posB, REAL3 velA, REAL3 velB, REAL thickness, REAL damping)
-{
-	// calculate relative position
-	REAL3 relPos = posB - posA;
-
-	float dist = Length(relPos);
-	float collideDist = thickness + thickness;
-	float restDist = Length(restPosA - restPosB);
-
-	REAL3 force = make_REAL3(0.0f);
-
-	REAL spring = 0.5f;
-	REAL shear = 0.1f;
-	REAL attraction = 0.0f;
-
-	if (dist < collideDist)
-	{
-		if (dist > restDist) return force;
-
-		if (restDist < collideDist)
-			collideDist = restDist;
-
-		REAL3 norm = relPos / dist;
-
-		// relative velocity
-		REAL3 relVel = velB - velA;
-
-		// relative tangential velocity
-		REAL3 tanVel = relVel - (Dot(relVel, norm) * norm);
-
-		// spring force
-		force = -spring * (collideDist - dist) * norm;
-		// dashpot (damping) force
-		force += damping * relVel;
-		// tangential shear force
-		force += shear * tanVel;
-		// attraction
-		force += attraction * relPos;
-	}
-
-	return force;
-}
-
-__device__ REAL3 collideCell(REAL thickness, REAL damping, uint gridRes, int3 gridPos, uint index, REAL3 pos, REAL3 vel, REAL3* oldPos, REAL3* oldVel, uint* cellStart, uint* cellEnd)
-{
-	uint gridHash = calcGridHash(gridPos, gridRes);
-
-	// get start of bucket for this cell
-	uint startIndex = cellStart[gridHash];
-
-	REAL3 force = make_REAL3(0.0f);
-
-	if (startIndex != 0xffffffff)  // cell is not empty
-	{
-		// iterate over particles in this cell
-		uint endIndex = cellEnd[gridHash];
-
-		for (uint j = startIndex; j < endIndex; j++)
-		{
-			if (j != index)  // check not colliding with self
-			{
-				REAL3 pos2 = make_REAL3(oldPos[j]);
-				REAL3 vel2 = make_REAL3(oldVel[j]);
-
-				//force += ColideSphere(pos, pos2, vel, vel2, thickness, damping);
-			}
-		}
-	}
-
-	return force;
-}
-
-__global__ void Colide_PP(REAL3* restPos, REAL3* pos1, REAL3* pos, REAL3* sortedVel, REAL3* vel, uint* gridHash, uint* gridIdx, uint* cellStart, uint* cellEnd, REAL* impulse, REAL thickness, uint gridRes, uint numVer, BOOL* flag)
-{
-	uint idx = threadIdx.x + blockDim.x * blockIdx.x;
-
-	if (idx >= numVer)
-		return;
-
-	REAL cellSize = 1.0 / gridRes;
-	int3 gridPos = calcGridPos(pos1[idx], cellSize);
-	uint hash = calcGridHash(gridPos, gridRes);
-	int cnt = 0;
-	REAL3 force = make_REAL3(0.0f);
-
-	flag[idx] = false;
+	REAL cellSize = 1.0 / clothParam._gridRes;
+	int3 gridPos = calculateGridPos(ver.d_Pos1[idx], cellSize);
 
 	for (int z = -1; z <= 1; z++)
 	{
@@ -291,29 +139,29 @@ __global__ void Colide_PP(REAL3* restPos, REAL3* pos1, REAL3* pos, REAL3* sorted
 			{
 				int3 neighbourPos = make_int3(gridPos.x + x, gridPos.y + y, gridPos.z + z);
 
-				uint neighHash = calcGridHash(neighbourPos, gridRes);
-				uint startIdx = cellStart[neighHash];
+				uint neighHash = calculateGridHash(neighbourPos, clothParam._gridRes);
+				uint startIdx = hash.d_cellStart[neighHash];
 
 				if (startIdx != 0xffffffff)
 				{
-					uint endIdx = cellEnd[neighHash];
+					uint endIdx = hash.d_cellEnd[neighHash];
 
 					for (uint i = startIdx; i < endIdx; i++)
 					{
 						uint id0 = idx;
-						uint id1 = gridIdx[i];
+						uint id1 = hash.d_gridIdx[i];
 
 						if (id0 != id1)
 						{
 
-							REAL3 diffPos = pos1[id0] - pos1[id1];
+							REAL3 diffPos = ver.d_Pos1[id0] - ver.d_Pos1[id1];
 							REAL dist2 = LengthSquared(diffPos);
-							REAL thickness2 = thickness * thickness;
+							REAL thickness2 = clothParam._thickness * clothParam._thickness;
 
 							if (dist2 > thickness2) continue;
 
-							REAL restDist2 = LengthSquared(restPos[id0] - restPos[id1]);
-							REAL minDist = thickness;
+							REAL restDist2 = LengthSquared(ver.d_restPos[id0] - ver.d_restPos[id1]);
+							REAL minDist = clothParam._thickness;
 
 							if (dist2 > restDist2) continue;
 
@@ -331,8 +179,8 @@ __global__ void Colide_PP(REAL3* restPos, REAL3* pos1, REAL3* pos, REAL3* sorted
 							atomicAdd_REAL(impulse + id1 * 3u + 1u, diffPos.y * -0.5);
 							atomicAdd_REAL(impulse + id1 * 3u + 2u, diffPos.z * -0.5);
 
-							REAL3 v0 = (pos1[id0] - pos[id0]);
-							REAL3 v1 = (pos1[id1] - pos[id1]);
+							REAL3 v0 = (ver.d_Pos1[id0] - ver.d_Pos[id0]);
+							REAL3 v1 = (ver.d_Pos1[id1] - ver.d_Pos[id1]);
 
 							REAL3 Vavg = (v0 + v1) * 0.5;
 
@@ -349,34 +197,9 @@ __global__ void Colide_PP(REAL3* restPos, REAL3* pos1, REAL3* pos, REAL3* sorted
 						}
 					}
 				}
-
-				//uint gridHash = calcGridHash(neighbourPos, gridRes);
-				//uint startIndex = cellStart[gridHash];
-
-				//if (startIndex != 0xffffffff)
-				//{
-				//	uint endIndex = cellEnd[gridHash];
-
-				//	for (uint j = startIndex; j < endIndex; j++)
-				//	{
-				//		if (j != idx)
-				//		{
-				//			REAL3 pos2 = make_REAL3(pos[j]);
-				//			REAL3 vel2 = make_REAL3(sortedVel[j]);
-
-				//			uint id0 = gridIdx[idx];
-				//			uint id1 = gridIdx[j];
-
-				//			force += ColideSphere(restPos[id0], restPos[id1], pos[idx], pos2, sortedVel[idx], vel2, thickness, damping);
-				//		}
-				//	}
-				//}
 			}
 		}
 	}
-
-	//uint sortedIdx = gridIdx[idx];
-	//vel[sortedIdx] = sortedVel[idx] + force;
 }
 
 __device__ double SDFCalculate(double x, double y, double z)
@@ -395,20 +218,20 @@ __device__ double SDFCalculate(REAL3 p)
 	return SDFCalculate(p.x, p.y, p.z);
 }
 
-__global__ void LevelSetCollision_D(REAL3* pos, REAL3* vel, uint numVer)
+__global__ void LevelSetCollision_D(Vertex ver)
 {
 	uint idx = threadIdx.x + blockDim.x * blockIdx.x;
 
-	if (idx >= numVer)
+	if (idx >= clothParam._numVertices)
 		return;
 
 	REAL deltaT = 0.01f;
 	REAL h = 0.1f;
 	REAL coefficientFriction = 0.1f;
 
-	REAL x = pos[idx].x;
-	REAL y = pos[idx].y;
-	REAL z = pos[idx].z;
+	REAL x = ver.d_Pos[idx].x;
+	REAL y = ver.d_Pos[idx].y;
+	REAL z = ver.d_Pos[idx].z;
 
 	REAL3 N = make_REAL3(SDFCalculate(x + h, y, z) - SDFCalculate(x, y, z),
 		SDFCalculate(x, y + h, z) - SDFCalculate(x, y, z),
@@ -419,13 +242,13 @@ __global__ void LevelSetCollision_D(REAL3* pos, REAL3* vel, uint numVer)
 	Normalize(N);
 
 	REAL pi = SDFCalculate(x, y, z); //PI, newPI 계산
-	REAL newPI = pi + Dot((vel[idx] * deltaT), N);
+	REAL newPI = pi + Dot((ver.d_Vel[idx] * deltaT), N);
 
 	if (newPI < 0)
 	{
-		REAL vpN = Dot(vel[idx], N); //원래의 법선 방향 속력
+		REAL vpN = Dot(ver.d_Vel[idx], N); //원래의 법선 방향 속력
 		REAL3 vpNN = N * vpN; //원래의 법선 방향 속도
-		REAL3 vpT = vel[idx] - vpNN; //원래의 접선 방향 속도
+		REAL3 vpT = ver.d_Vel[idx] - vpNN; //원래의 접선 방향 속도
 
 		double newVpN = vpN - (newPI / deltaT); //새로운 법선 방향 속력
 		REAL3 newVpNN = N * newVpN; // 새로운 법선 방향 속도
@@ -437,50 +260,50 @@ __global__ void LevelSetCollision_D(REAL3* pos, REAL3* vel, uint numVer)
 		if (1 - friction < 0)
 			newVpT = make_REAL3(0, 0, 0);
 
-		vel[idx] = newVpNN + newVpT; //속도 업데이트
+		ver.d_Vel[idx] = newVpNN + newVpT; //속도 업데이트
 	}
 }
 
-__global__ void UpdateFaceAABB(uint3* fIdx, REAL3* pos, AABB* fAABB, uint numFace)
+__global__ void UpdateFaceAABB(Face face, Vertex ver)
 {
 	uint idx = threadIdx.x + blockDim.x * blockIdx.x;
 
-	if (idx >= numFace)
+	if (idx >= clothParam._numFaces)
 		return;
 
-	uint iv0 = fIdx[idx].x;
-	uint iv1 = fIdx[idx].y;
-	uint iv2 = fIdx[idx].z;
+	uint iv0 = face.d_faceIdx[idx].x;
+	uint iv1 = face.d_faceIdx[idx].y;
+	uint iv2 = face.d_faceIdx[idx].z;
 
-	REAL3 v0 = pos[iv0];
-	REAL3 v1 = pos[iv1];
-	REAL3 v2 = pos[iv2];
+	REAL3 v0 = ver.d_Pos1[iv0];
+	REAL3 v1 = ver.d_Pos1[iv1];
+	REAL3 v2 = ver.d_Pos1[iv2];
 
-	setAABB(fAABB[idx], make_REAL3(100.0f, 100.0f, 100.0f), make_REAL3(-100.0f, -100.0f, -100.0f));
-	addAABB(fAABB[idx], v0);
-	addAABB(fAABB[idx], v1);
-	addAABB(fAABB[idx], v2);
+	setAABB(face.d_faceAABB[idx], make_REAL3(100.0f, 100.0f, 100.0f), make_REAL3(-100.0f, -100.0f, -100.0f));
+	addAABB(face.d_faceAABB[idx], v0);
+	addAABB(face.d_faceAABB[idx], v1);
+	addAABB(face.d_faceAABB[idx], v2);
 }
 
-__global__ void Colide_PT(uint3* fIdx, REAL3* pos, AABB* fAABB, uint* gridHash, uint* gridIdx, uint* cellStart, uint* cellEnd, REAL* impulse, REAL thickness, uint gridRes, uint numFace, BOOL* flag)
+__global__ void Colide_PT(Face face, Vertex ver, Device_Hash hash, REAL* impulse)
 {
 	uint idx = threadIdx.x + blockDim.x * blockIdx.x;
 
-	if (idx >= numFace)
+	if (idx >= clothParam._numFaces)
 		return;
 
-	uint iv0 = fIdx[idx].x;
-	uint iv1 = fIdx[idx].y;
-	uint iv2 = fIdx[idx].z;
+	uint iv0 = face.d_faceIdx[idx].x;
+	uint iv1 = face.d_faceIdx[idx].y;
+	uint iv2 = face.d_faceIdx[idx].z;
 
-	REAL3 p0 = pos[iv0];
-	REAL3 p1 = pos[iv1];
-	REAL3 p2 = pos[iv2];
+	REAL3 p0 = ver.d_Pos1[iv0];
+	REAL3 p1 = ver.d_Pos1[iv1];
+	REAL3 p2 = ver.d_Pos1[iv2];
 
-	REAL cellSize = 1.0 / gridRes;
-	
-	int3 gridMinPos = calcGridPos(fAABB[idx]._min, cellSize);
-	int3 gridMaxPos = calcGridPos(fAABB[idx]._max, cellSize);
+	REAL cellSize = 1.0 / clothParam._gridRes;
+
+	int3 gridMinPos = calculateGridPos(face.d_faceAABB[idx]._min, cellSize);
+	int3 gridMaxPos = calculateGridPos(face.d_faceAABB[idx]._max, cellSize);
 
 	for (int xi = gridMinPos.x - 1; xi <= gridMaxPos.x + 1; xi++)
 	{
@@ -489,21 +312,21 @@ __global__ void Colide_PT(uint3* fIdx, REAL3* pos, AABB* fAABB, uint* gridHash, 
 			for (int zi = gridMinPos.z - 1; zi <= gridMaxPos.z + 1; zi++)
 			{
 				int3 neighbourPos = make_int3(xi, yi, zi);
-				uint gridHash = calcGridHash(neighbourPos, gridRes);
-				uint startIndex = cellStart[gridHash];
+				uint gridHash = calculateGridHash(neighbourPos, clothParam._gridRes);
+				uint startIndex = hash.d_cellStart[gridHash];
 
 				if (startIndex != 0xffffffff)
 				{
-					uint endIndex = cellEnd[gridHash];
+					uint endIndex = hash.d_cellEnd[gridHash];
 
 					REAL u, v, w;
 					for (uint j = startIndex; j < endIndex; j++)
 					{
-						uint sortedIdx = gridIdx[j];
+						uint sortedIdx = hash.d_gridIdx[j];
 
 						if (sortedIdx == iv0 || sortedIdx == iv1 || sortedIdx == iv2) continue;
-						
-						REAL3 p = make_REAL3(pos[sortedIdx]);
+
+						REAL3 p = make_REAL3(ver.d_Pos1[sortedIdx]);
 
 						REAL u, v, w;
 
@@ -534,14 +357,14 @@ __global__ void Colide_PT(uint3* fIdx, REAL3* pos, AABB* fAABB, uint* gridHash, 
 
 						REAL distance = Length(p - pc);
 
-						if (distance > thickness) // 설정 거리보다 멀리 있을 경우 투영 X
+						if (distance > clothParam._thickness) // 설정 거리보다 멀리 있을 경우 투영 X
 							continue;
 
 						REAL3 n = (p - pc);
 						Normalize(n);
 
 						//barycentric coord 이용 보간
-						REAL c = Dot(n, p - p0) - thickness;
+						REAL c = Dot(n, p - p0) - clothParam._thickness;
 
 						REAL a0 = w;
 						REAL a1 = u;
@@ -558,49 +381,21 @@ __global__ void Colide_PT(uint3* fIdx, REAL3* pos, AABB* fAABB, uint* gridHash, 
 						REAL3 dP1 = gP1 * scale * (-1);
 						REAL3 dP2 = gP2 * scale * (-1);
 
-						REAL damping = 1.0;
-						//sortedPos[j] += dP * damping;
-						//sortedPos[iv0] += dP0 * damping;
-						//sortedPos[iv1] += dP1 * damping;
-						//sortedPos[iv2] += dP2 * damping;
-						//pos[sortedIdx] += dP * damping;
-						//pos[iv0] += dP0 * damping;
-						//pos[iv1] += dP1 * damping;
-						//pos[iv2] += dP2 * damping;
+						atomicAdd_REAL(impulse + sortedIdx * 3u + 0u, dP.x);
+						atomicAdd_REAL(impulse + sortedIdx * 3u + 1u, dP.y);
+						atomicAdd_REAL(impulse + sortedIdx * 3u + 2u, dP.z);
 
-						atomicAdd_REAL(impulse + sortedIdx * 3u + 0u, dP.x * damping);
-						atomicAdd_REAL(impulse + sortedIdx * 3u + 1u, dP.y * damping);
-						atomicAdd_REAL(impulse + sortedIdx * 3u + 2u, dP.z * damping);
+						atomicAdd_REAL(impulse + iv0 * 3u + 0u, dP0.x);
+						atomicAdd_REAL(impulse + iv0 * 3u + 1u, dP0.y);
+						atomicAdd_REAL(impulse + iv0 * 3u + 2u, dP0.z);
 
-						atomicAdd_REAL(impulse + iv0 * 3u + 0u, dP0.x * damping);
-						atomicAdd_REAL(impulse + iv0 * 3u + 1u, dP0.y * damping);
-						atomicAdd_REAL(impulse + iv0 * 3u + 2u, dP0.z * damping);
+						atomicAdd_REAL(impulse + iv1 * 3u + 0u, dP1.x);
+						atomicAdd_REAL(impulse + iv1 * 3u + 1u, dP1.y);
+						atomicAdd_REAL(impulse + iv1 * 3u + 2u, dP1.z);
 
-						atomicAdd_REAL(impulse + iv1 * 3u + 0u, dP1.x * damping);
-						atomicAdd_REAL(impulse + iv1 * 3u + 1u, dP1.y * damping);
-						atomicAdd_REAL(impulse + iv1 * 3u + 2u, dP1.z * damping);
-
-						atomicAdd_REAL(impulse + iv2 * 3u + 0u, dP2.x * damping);
-						atomicAdd_REAL(impulse + iv2 * 3u + 1u, dP2.y * damping);
-						atomicAdd_REAL(impulse + iv2 * 3u + 2u, dP2.z * damping);
-
-						//REAL3 cor = n * (thickness - distance);
-
-						//atomicAdd_REAL(impulse + sortedIdx * 3u + 0u, cor.x * 0.5);
-						//atomicAdd_REAL(impulse + sortedIdx * 3u + 1u, cor.y * 0.5);
-						//atomicAdd_REAL(impulse + sortedIdx * 3u + 2u, cor.z * 0.5);
-
-						//atomicAdd_REAL(impulse + iv0 * 3u + 0u, cor.x * -0.5);
-						//atomicAdd_REAL(impulse + iv0 * 3u + 1u, cor.y * -0.5);
-						//atomicAdd_REAL(impulse + iv0 * 3u + 2u, cor.z * -0.5);
-
-						//atomicAdd_REAL(impulse + iv1 * 3u + 0u, cor.x * -0.5);
-						//atomicAdd_REAL(impulse + iv1 * 3u + 1u, cor.y * -0.5);
-						//atomicAdd_REAL(impulse + iv1 * 3u + 2u, cor.z * -0.5);
-
-						//atomicAdd_REAL(impulse + iv2 * 3u + 0u, cor.x * -0.5);
-						//atomicAdd_REAL(impulse + iv2 * 3u + 1u, cor.y * -0.5);
-						//atomicAdd_REAL(impulse + iv2 * 3u + 2u, cor.z * -0.5);
+						atomicAdd_REAL(impulse + iv2 * 3u + 0u, dP2.x);
+						atomicAdd_REAL(impulse + iv2 * 3u + 1u, dP2.y);
+						atomicAdd_REAL(impulse + iv2 * 3u + 2u, dP2.z);
 					}
 				}
 			}
@@ -608,17 +403,17 @@ __global__ void Colide_PT(uint3* fIdx, REAL3* pos, AABB* fAABB, uint* gridHash, 
 	}
 }
 
-__global__ void ApplyImpulse_kernel(REAL3* pos, REAL* impulse, uint numVer, REAL damping)
+__global__ void ApplyImpulse_kernel(Vertex ver, REAL* impulse)
 {
 	uint idx = threadIdx.x + blockDim.x * blockIdx.x;
 
-	if (idx >= numVer)
+	if (idx >= clothParam._numVertices)
 		return;
 
 	REAL3 im;
-	im.x = impulse[idx * 3 + 0u] * damping;
-	im.y = impulse[idx * 3 + 1u] * damping;
-	im.z = impulse[idx * 3 + 2u] * damping;
+	im.x = impulse[idx * 3 + 0u] * clothParam._selfColliDamping;
+	im.y = impulse[idx * 3 + 1u] * clothParam._selfColliDamping;
+	im.z = impulse[idx * 3 + 2u] * clothParam._selfColliDamping;
 
-	pos[idx] += im;
+	ver.d_Pos1[idx] += im;
 }
