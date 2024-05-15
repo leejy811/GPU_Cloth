@@ -16,6 +16,8 @@ public:	//Host
 	//Face
 	vector<uint3> h_faceIdx;
 	vector<REAL3> h_fNormal;
+	vector<REAL> h_fSaturation;
+	PrefixArray<uint> h_nbFFaces;
 	//Edge
 	vector<uint2> h_edgeIdx;
 	PrefixArray<uint> h_nbEFaces;
@@ -41,6 +43,7 @@ private:		//init
 	void buildAdjacency(void);
 	void buildAdjacency_VF(void);
 	void buildAdjacency_EF(void);
+	void buildAdjacency_FF(void);
 	void buildEdges(void);
 	void computeNormal(void);
 	void SetMass(void);

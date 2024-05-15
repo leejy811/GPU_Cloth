@@ -41,7 +41,7 @@ void PBD_ClothCuda::InitParam(REAL gravity, REAL dt)
 {
 	_param._gridRes = 128;
 	_param._thickness = 4.0 / _param._gridRes;
-	_param._selfColliDamping = 0.02f;
+	_param._selfColliDamping = 0.1f;
 
 	_param._iteration = 10;
 	_param._springK = 0.9f;
@@ -50,6 +50,12 @@ void PBD_ClothCuda::InitParam(REAL gravity, REAL dt)
 	_param._gravity = gravity;
 	_param._subdt = dt / _param._iteration;
 	_param._subInvdt = 1.0 / _param._subdt;
+
+	_param._maxsaturation = 20.0;
+	_param._absorptionK = 0.05;
+
+	_param._diffusK = 0.05;
+	_param._gravityDiffusK = 0.01;
 }
 
 void PBD_ClothCuda::buildConstraint(void)
@@ -128,8 +134,8 @@ void PBD_ClothCuda::ComputeWind_kernel(REAL3 wind)
 
 void PBD_ClothCuda::ProjectConstraint_kernel(void)
 {
-	_strechSpring->IterateConstraint(d_Vertex.d_Pos1, d_Vertex.d_InvMass);
-	_bendSpring->IterateConstraint(d_Vertex.d_Pos1, d_Vertex.d_InvMass);
+	_strechSpring->IterateConstraint(d_Vertex.d_Pos1, d_Vertex.d_InvMass, d_Vertex.d_SatMass);
+	_bendSpring->IterateConstraint(d_Vertex.d_Pos1, d_Vertex.d_InvMass, d_Vertex.d_SatMass);
 }
 
 void PBD_ClothCuda::SetHashTable_kernel(void)
@@ -146,7 +152,7 @@ void PBD_ClothCuda::UpdateFaceAABB_Kernel(void)
 		(d_Face, d_Vertex);
 }
 
-void PBD_ClothCuda::Colide_kernel()
+void PBD_ClothCuda::Colide_kernel(void)
 {
 	uint numThreads, numBlocks;
 	Dvector<REAL> impulse(_param._numVertices * 3u);
@@ -164,6 +170,46 @@ void PBD_ClothCuda::Colide_kernel()
 		(d_Vertex, impulse());
 }
 
+void PBD_ClothCuda::WetCloth_Kernel(void)
+{
+	Absorption_Kernel();
+	Diffusion_Kernel();
+	Dripping_Kernel();
+	UpdateMass_Kernel();
+}
+
+void PBD_ClothCuda::Absorption_Kernel(void)
+{
+	WaterAbsorption_Kernel << <divup(_param._numFaces, BLOCK_SIZE), BLOCK_SIZE >> >
+		(d_Face, d_Vertex);
+}
+
+void PBD_ClothCuda::Diffusion_Kernel(void)
+{
+	Dvector<REAL> deltaS(_param._numFaces);
+	deltaS.memset(0);
+
+	uint numThreads, numBlocks;
+	ComputeGridSize(_param._numFaces, 64, numBlocks, numThreads);
+	WaterDiffusion_Kernel << <numBlocks, numThreads >> >
+		(d_Face, d_Vertex, deltaS());
+
+	ApplyDeltaSaturation_Kernel << <numBlocks, numThreads >> >
+		(d_Face, deltaS());
+}
+
+void PBD_ClothCuda::Dripping_Kernel(void)
+{
+	WaterDripping_Kernel << <divup(_param._numFaces, BLOCK_SIZE), BLOCK_SIZE >> >
+		(d_Face, d_Vertex);
+}
+
+void PBD_ClothCuda::UpdateMass_Kernel(void)
+{
+	UpdateVertexMass_Kernel << <divup(_param._numVertices, BLOCK_SIZE), BLOCK_SIZE >> >
+		(d_Face, d_Vertex);
+}
+
 void PBD_ClothCuda::LevelSetCollision_kernel(void)
 {
 	LevelSetCollision_D << <divup(_param._numVertices, BLOCK_SIZE), BLOCK_SIZE >> >
@@ -172,6 +218,7 @@ void PBD_ClothCuda::LevelSetCollision_kernel(void)
 
 void PBD_ClothCuda::draw(void)
 {
+	glEnable(GL_COLOR_MATERIAL);
 	for (uint i = 0u; i < _param._numFaces; i++)
 	{
 		uint ino0 = h_Mesh->h_faceIdx[i].x;
@@ -183,6 +230,14 @@ void PBD_ClothCuda::draw(void)
 
 		glBegin(GL_POLYGON);
 
+		REAL ratio = h_Mesh->h_fSaturation[i] / _param._maxsaturation;
+		REAL3 color = ScalarToColor(ratio);
+		glColor3f(color.x, color.y, color.z);
+
+		//REAL ratio = h_Mesh->h_fSaturation[i] / _param._maxsaturation;
+		//REAL color = 1.0 - ratio;
+		//glColor3f(color, color, color);
+
 		glNormal3f(h_Mesh->h_vNormal[ino0].x, h_Mesh->h_vNormal[ino0].y, h_Mesh->h_vNormal[ino0].z);
 		glVertex3f(a.x, a.y, a.z);
 		glNormal3f(h_Mesh->h_vNormal[ino1].x, h_Mesh->h_vNormal[ino1].y, h_Mesh->h_vNormal[ino1].z);
@@ -192,6 +247,10 @@ void PBD_ClothCuda::draw(void)
 
 		glEnd();
 	}
+
+	glTranslatef(0.5f, 0.5f, 0.5f);
+	glColor3f(1, 1, 1);
+	glutSolidSphere(0.28f, 50, 50);
 
 	glEnable(GL_LIGHTING);
 }
@@ -218,6 +277,21 @@ void PBD_ClothCuda::drawWire(void)
 	glEnable(GL_LIGHTING);
 }
 
+REAL3 PBD_ClothCuda::ScalarToColor(REAL val)
+{
+	REAL fColorMap[5][3] = { { 0,0,1 },{ 0,1,1 },{ 0,1,0 },{ 1,1,0 },{ 1,0,0 } };   //Red->Blue
+	REAL v = val;
+	if (val > 1.0) v = 1.0; if (val < 0.0) v = 0.0; v *= 4.0;
+	int low = (int)floor(v), high = (int)ceil(v);
+	REAL t = v - low;
+	REAL x = (fColorMap[low][0]) * (1 - t) + (fColorMap[high][0]) * t;
+	REAL y = (fColorMap[low][1]) * (1 - t) + (fColorMap[high][1]) * t;
+	REAL z = (fColorMap[low][2]) * (1 - t) + (fColorMap[high][2]) * t;
+	REAL3 color = make_REAL3(x, y, z);
+	return color;
+}
+
+
 void PBD_ClothCuda::InitDeviceMem(void)
 {
 	d_Vertex.InitDeviceMem(_param._numVertices);
@@ -241,4 +315,5 @@ void PBD_ClothCuda::copyToDevice(void)
 void PBD_ClothCuda::copyToHost(void)
 {
 	d_Vertex.copyToHost(*h_Mesh);
+	d_Face.copyToHost(*h_Mesh);
 }

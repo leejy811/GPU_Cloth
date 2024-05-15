@@ -49,7 +49,7 @@ __global__ void CompIntergrate_kernel(Vertex ver)
 	if (idx >= clothParam._numVertices)
 		return;
 
-	//if (ver.d_Pos1[idx].y > 0.9   && ver.d_Pos1[idx].x > 0.9)
+	//if (ver.d_Pos1[idx].y > 0.9)
 	//	return;
 
 	ver.d_Vel[idx] = (ver.d_Pos1[idx] - ver.d_Pos[idx]) * clothParam._subInvdt;
@@ -205,12 +205,16 @@ __global__ void Colide_PP(Vertex ver, Device_Hash hash, REAL* impulse)
 __device__ double SDFCalculate(double x, double y, double z)
 {
 	//ax + by + cz + d = 0 평면 방정식
-	double a = 0.0;
-	double b = 2.0;
-	double c = 0.0;
-	double d = -1.0;
+	//double a = 0.0;
+	//double b = 2.0;
+	//double c = 0.0;
+	//double d = -1.0;
 
-	return (a * x + b * y + c * z + d) / sqrt(pow(a, 2) + pow(b, 2) + pow(c, 2));
+	//return (a * x + b * y + c * z + d) / sqrt(pow(a, 2) + pow(b, 2) + pow(c, 2));
+
+	double x0 = 0.5f, y0 = 0.5f, z0 = 0.5f; //sphere 중심 좌표
+	double r = 0.3f;
+	return sqrt(pow(x - x0, 2) + pow(y - y0, 2) + pow(z - z0, 2)) - r; //구 방정식
 }
 
 __device__ double SDFCalculate(REAL3 p)
@@ -227,7 +231,7 @@ __global__ void LevelSetCollision_D(Vertex ver)
 
 	REAL deltaT = 0.01f;
 	REAL h = 0.1f;
-	REAL coefficientFriction = 0.1f;
+	REAL coefficientFriction = 0.5f;
 
 	REAL x = ver.d_Pos[idx].x;
 	REAL y = ver.d_Pos[idx].y;
@@ -244,6 +248,7 @@ __global__ void LevelSetCollision_D(Vertex ver)
 	REAL pi = SDFCalculate(x, y, z); //PI, newPI 계산
 	REAL newPI = pi + Dot((ver.d_Vel[idx] * deltaT), N);
 
+	ver.d_vSaturation[idx] = 0;
 	if (newPI < 0)
 	{
 		REAL vpN = Dot(ver.d_Vel[idx], N); //원래의 법선 방향 속력
@@ -261,6 +266,8 @@ __global__ void LevelSetCollision_D(Vertex ver)
 			newVpT = make_REAL3(0, 0, 0);
 
 		ver.d_Vel[idx] = newVpNN + newVpT; //속도 업데이트
+
+		ver.d_vSaturation[idx] += 0.000001f;
 	}
 }
 
@@ -416,4 +423,182 @@ __global__ void ApplyImpulse_kernel(Vertex ver, REAL* impulse)
 	im.z = impulse[idx * 3 + 2u] * clothParam._selfColliDamping;
 
 	ver.d_Pos1[idx] += im;
+}
+
+__global__ void WaterAbsorption_Kernel(Face face, Vertex ver)
+{
+	uint idx = threadIdx.x + blockDim.x * blockIdx.x;
+
+	if (idx >= clothParam._numFaces)
+		return;
+
+	uint iv0 = face.d_faceIdx[idx].x;
+	uint iv1 = face.d_faceIdx[idx].y;
+	uint iv2 = face.d_faceIdx[idx].z;
+
+	REAL3 v0 = ver.d_Pos[iv0];
+	REAL3 v1 = ver.d_Pos[iv1];
+	REAL3 v2 = ver.d_Pos[iv2];
+
+	REAL area = (Length(Cross(v1 - v0, v2 - v0))) / 2;
+	REAL mass = ver.d_vSaturation[iv0] + ver.d_vSaturation[iv1] + ver.d_vSaturation[iv2];
+	REAL abMass = clothParam._absorptionK * (clothParam._maxsaturation - face.d_fSaturation[idx]) * area;
+	REAL resiMass = mass - abMass;
+
+	if (resiMass > 0)
+	{
+		face.d_fSaturation[idx] += abMass / area;
+		//Particle 질량 resiMass로 변경
+	}
+	else
+	{
+		face.d_fSaturation[idx] += mass / area;
+		//Particle 시뮬레이션에서 제외
+	}
+}
+
+__global__ void WaterDiffusion_Kernel(Face face, Vertex ver, REAL* delS)
+{
+	uint idx = threadIdx.x + blockDim.x * blockIdx.x;
+
+	if (idx >= clothParam._numFaces)
+		return;
+
+	uint iv0 = face.d_faceIdx[idx].x;
+	uint iv1 = face.d_faceIdx[idx].y;
+	uint iv2 = face.d_faceIdx[idx].z;
+
+	REAL3 v0 = ver.d_Pos[iv0];
+	REAL3 v1 = ver.d_Pos[iv1];
+	REAL3 v2 = ver.d_Pos[iv2];
+
+	REAL3 cl = (v0 + v1 + v2) / 3;
+	REAL sSum = 0;
+
+	uint numNbFaces = face.d_nbFace._index[idx + 1] - face.d_nbFace._index[idx];
+	REAL sln[3];
+	REAL sl = face.d_fSaturation[idx];
+
+	for (int i = 0; i < numNbFaces; i++)
+	{
+		uint fIdx = face.d_nbFace._array[face.d_nbFace._index[idx] + i];
+
+		uint nbiv0 = face.d_faceIdx[fIdx].x;
+		uint nbiv1 = face.d_faceIdx[fIdx].y;
+		uint nbiv2 = face.d_faceIdx[fIdx].z;
+
+		REAL3 nbv0 = ver.d_Pos[nbiv0];
+		REAL3 nbv1 = ver.d_Pos[nbiv1];
+		REAL3 nbv2 = ver.d_Pos[nbiv2];
+
+		REAL3 cn = (nbv0 + nbv1 + nbv2) / 3;
+		REAL sn = face.d_fSaturation[fIdx];
+		REAL cosln = Dot(cl, cn) / (Length(cl) * Length(cn));
+		sln[i] = min(0.0, clothParam._diffusK * (sl - sn) + clothParam._gravityDiffusK * cosln);
+		sSum += sln[i];
+
+		if (cosln > 0)
+			atomicAdd_REAL(face.d_fDripbuf + fIdx, face.d_fDripbuf[idx] * cosln);
+
+		//Squeeze Cloth
+		//REAL3 clr = (ver.d_restPos[idx] + ver.d_restPos[idx] + ver.d_restPos[idx]) / 3;
+		//REAL3 cnr = (ver.d_restPos[fIdx] + ver.d_restPos[fIdx] + ver.d_restPos[fIdx]) / 3;
+
+		//REAL reducethres = max(0.0, Length(clr - cnr) - Length(cl - cn));
+		//face.d_fDripThres[idx] = max(0.0, face.d_fDripThres[idx] - reducethres * 0.01f);
+	}
+
+	REAL norm = 1;
+	if (sSum > sl)
+		norm = sl / sSum;
+
+	REAL areal = (Length(Cross(v1 - v0, v2 - v0))) / 2;
+	for (int i = 0; i < numNbFaces; i++)
+	{
+		uint fIdx = face.d_nbFace._array[face.d_nbFace._index[idx] + i];
+
+		uint nbiv0 = face.d_faceIdx[fIdx].x;
+		uint nbiv1 = face.d_faceIdx[fIdx].y;
+		uint nbiv2 = face.d_faceIdx[fIdx].z;
+
+		REAL3 nbv0 = ver.d_Pos[nbiv0];
+		REAL3 nbv1 = ver.d_Pos[nbiv1];
+		REAL3 nbv2 = ver.d_Pos[nbiv2];
+
+		REAL arean = (Length(Cross(nbv1 - nbv0, nbv2 - nbv0))) / 2;
+
+		delS[idx] -= norm * sln[i];
+		atomicAdd_REAL(delS + fIdx, norm * sln[i] * (areal / arean));
+	}
+}
+
+__global__ void ApplyDeltaSaturation_Kernel(Face face, REAL* delS)
+{
+	uint idx = threadIdx.x + blockDim.x * blockIdx.x;
+
+	if (idx >= clothParam._numFaces)
+		return;
+
+	face.d_fSaturation[idx] += delS[idx];
+}
+
+__global__ void WaterDripping_Kernel(Face face, Vertex ver)
+{
+	uint idx = threadIdx.x + blockDim.x * blockIdx.x;
+
+	if (idx >= clothParam._numFaces)
+		return;
+
+	if (clothParam._maxsaturation < face.d_fSaturation[idx])
+	{
+		uint iv0 = face.d_faceIdx[idx].x;
+		uint iv1 = face.d_faceIdx[idx].y;
+		uint iv2 = face.d_faceIdx[idx].z;
+
+		REAL3 v0 = ver.d_Pos[iv0];
+		REAL3 v1 = ver.d_Pos[iv1];
+		REAL3 v2 = ver.d_Pos[iv2];
+
+		REAL area = (Length(Cross(v1 - v0, v2 - v0))) / 2;
+		REAL exMass = (face.d_fSaturation[idx] - clothParam._maxsaturation) * area;
+		face.d_fDripbuf[idx] += exMass;
+
+		while (face.d_fDripbuf[idx] > face.d_fDripThres[idx])
+		{
+			//Particle 생성 및 초기화 추가
+			face.d_fDripbuf[idx] -= 0.01;
+		}
+
+		face.d_fSaturation[idx] = clothParam._maxsaturation;
+	}
+}
+
+__global__ void UpdateVertexMass_Kernel(Face face, Vertex ver)
+{
+	uint idx = threadIdx.x + blockDim.x * blockIdx.x;
+
+	if (idx >= clothParam._numVertices)
+		return;
+
+	uint numNbFaces = ver.d_nbFaces._index[idx + 1] - ver.d_nbFaces._index[idx];
+	REAL addMass = 0.0;
+
+	for (int i = 0; i < numNbFaces; i++)
+	{
+		uint fIdx = ver.d_nbFaces._array[ver.d_nbFaces._index[idx] + i];
+
+		uint iv0 = face.d_faceIdx[fIdx].x;
+		uint iv1 = face.d_faceIdx[fIdx].y;
+		uint iv2 = face.d_faceIdx[fIdx].z;
+
+		REAL3 v0 = ver.d_Pos[iv0];
+		REAL3 v1 = ver.d_Pos[iv1];
+		REAL3 v2 = ver.d_Pos[iv2];
+
+		REAL area = (Length(Cross(v1 - v0, v2 - v0))) / 2;
+
+		addMass += (face.d_fSaturation[fIdx] * area) / 3;
+	}
+
+	ver.d_SatMass[idx] = addMass;
 }

@@ -58,11 +58,17 @@ public:		//Update
 	void ProjectConstraint_kernel(void);
 	void SetHashTable_kernel(void);
 	void UpdateFaceAABB_Kernel(void);
-	void Colide_kernel();
+	void Colide_kernel(void);
+	void WetCloth_Kernel(void);
+	void Absorption_Kernel(void);
+	void Diffusion_Kernel(void);
+	void Dripping_Kernel(void);
+	void UpdateMass_Kernel(void);
 	void LevelSetCollision_kernel(void);
 public:
 	void draw(void);
 	void drawWire(void);
+	REAL3 ScalarToColor(REAL val);
 public:		//Cuda
 	void InitDeviceMem(void);
 	void copyToDevice(void);

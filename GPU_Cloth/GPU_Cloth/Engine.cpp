@@ -31,6 +31,7 @@ void	Engine::simulation(void)
 			cloth->Colide_kernel();
 			cloth->Intergrate_kernel();
 			cloth->LevelSetCollision_kernel();
+			cloth->WetCloth_Kernel();
 		}
 		cloth->copyToHost();
 	}

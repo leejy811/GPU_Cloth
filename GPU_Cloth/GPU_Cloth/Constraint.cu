@@ -83,19 +83,19 @@ void Constraint::InitConstraintColor(void)
 	h_ColorIdx.init(graph);
 }
 
-void Constraint::IterateConstraint(REAL3* pos, REAL* invm)
+void Constraint::IterateConstraint(REAL3* pos, REAL* invm, REAL* satm)
 {
 	for (int i = 0; i < _param._numColor; i++)
 	{
 		uint numConst = h_ColorIdx._index[i + 1] - h_ColorIdx._index[i];
-		SolveDistanceConstraint_kernel(numConst, i, pos, invm);
+		SolveDistanceConstraint_kernel(numConst, i, pos, invm, satm);
 	}
 }
 
-void Constraint::SolveDistanceConstraint_kernel(uint numConst, uint idx, REAL3* pos, REAL* invm)
+void Constraint::SolveDistanceConstraint_kernel(uint numConst, uint idx, REAL3* pos, REAL* invm, REAL* satm)
 {
 	SolveDistConstraint_kernel << <divup(numConst, CONST_BLOCK_SIZE), CONST_BLOCK_SIZE >> >
-		(pos, invm, d_EdgeIdx(), d_RestLength(), d_ColorIdx._array(), d_ColorIdx._index(), idx, numConst);
+		(pos, invm, satm, d_EdgeIdx(), d_RestLength(), d_ColorIdx._array(), d_ColorIdx._index(), idx, numConst);
 }
 
 void Constraint::InitDeviceMem(void)

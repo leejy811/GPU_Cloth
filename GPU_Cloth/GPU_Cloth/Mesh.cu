@@ -60,6 +60,7 @@ void Mesh::LoadObj(char* filename, AABB boundary)
 	computeNormal();
 	h_pos1.resize(h_pos.size(), make_REAL3(0.0, 0.0, 0.0));
 	h_vel.resize(h_pos.size(), make_REAL3(0.0, 0.0, 0.0));
+	h_fSaturation.resize(h_faceIdx.size(), 0.0);
 
 	REAL3 maxPos = make_REAL3(-100.0, -100.0, -100.0);
 	REAL3 minPos = make_REAL3(100.0, 100.0, 100.0);
@@ -116,7 +117,15 @@ void Mesh::moveCenter(REAL scale, AABB boundary)
 
 	for (int i = 0; i < h_pos.size(); i++)
 	{
-		h_pos[i] += make_REAL3(1.0, 1.0, 1.0);
+		h_pos[i] += make_REAL3(0.5, 0.5, 1.0);
+
+		REAL tmp = h_pos[i].y;
+		h_pos[i].y = h_pos[i].z;
+		h_pos[i].z = tmp;
+
+		tmp = h_pos[i].x;
+		h_pos[i].x = h_pos[i].z;
+		h_pos[i].z = tmp;
 	}
 }
 
@@ -133,6 +142,7 @@ void Mesh::buildAdjacency(void)
 	buildAdjacency_VF();
 	buildEdges();
 	buildAdjacency_EF();
+	buildAdjacency_FF();
 }
 
 void Mesh::buildAdjacency_VF(void)
@@ -199,6 +209,23 @@ void Mesh::buildAdjacency_EF(void)
 	}
 
 	h_nbEFaces.init(nbEF);
+}
+
+void Mesh::buildAdjacency_FF(void)
+{
+	vector<set<uint>> nbFF(h_faceIdx.size());
+
+	for (int i = 0; i < h_edgeIdx.size(); i++)
+	{
+		uint numNbEF = h_nbEFaces._index[i + 1] - h_nbEFaces._index[i];
+		if (numNbEF == 2)
+		{
+			nbFF[h_nbEFaces._array[h_nbEFaces._index[i]]].insert(h_nbEFaces._array[h_nbEFaces._index[i] + 1]);
+			nbFF[h_nbEFaces._array[h_nbEFaces._index[i] + 1]].insert(h_nbEFaces._array[h_nbEFaces._index[i]]);
+		}
+	}
+
+	h_nbFFaces.init(nbFF);
 }
 
 void Mesh::computeNormal(void)

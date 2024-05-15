@@ -21,6 +21,8 @@ public:		//Device
 	REAL3* d_Vel;
 	REAL3* d_vNormal;
 	REAL* d_InvMass;
+	REAL* d_SatMass;
+	REAL* d_vSaturation;
 	DPrefixArray<uint> d_nbFaces;
 	DPrefixArray<uint> d_nbVertices;
 public:

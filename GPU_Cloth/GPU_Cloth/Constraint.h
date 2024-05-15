@@ -46,8 +46,8 @@ public:		//Init
 	void InitGraphAdjacency();
 	void InitConstraintColor(void);
 public:		//Update
-	void IterateConstraint(REAL3* pos, REAL* invm);
-	void SolveDistanceConstraint_kernel(uint numConst, uint idx, REAL3* pos, REAL* invm);
+	void IterateConstraint(REAL3* pos, REAL* invm, REAL* satm);
+	void SolveDistanceConstraint_kernel(uint numConst, uint idx, REAL3* pos, REAL* invm, REAL* satm);
 public:		//Cuda
 	void InitDeviceMem(void);
 	void	copyToDevice(void);

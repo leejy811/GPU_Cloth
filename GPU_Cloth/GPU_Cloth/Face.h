@@ -18,12 +18,17 @@ public:		//Device
 	uint3* d_faceIdx;
 	AABB* d_faceAABB;
 	REAL3* d_fNormal;
+	REAL* d_fSaturation;
+	REAL* d_fDripbuf;
+	REAL* d_fDripThres;
+	DPrefixArray<uint> d_nbFace;
 public:
 	Face();
 	~Face();
 public:
 	void InitDeviceMem(uint numFace);
 	void copyToDevice(const Mesh& mesh);
+	void copyToHost(Mesh& mesh);
 	void FreeDeviceMem(void);
 };
 

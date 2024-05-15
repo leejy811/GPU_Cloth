@@ -24,6 +24,12 @@ struct ClothParam
 	REAL _gravity;
 	REAL _subdt;
 	REAL _subInvdt;
+
+	REAL _maxsaturation;
+	REAL _absorptionK;
+
+	REAL _diffusK;
+	REAL _gravityDiffusK;
 };
 
 struct ConstParam

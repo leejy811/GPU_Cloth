@@ -8,7 +8,7 @@
 #include <string.h>
 
 int width = 800;
-int height = 800;
+int height = 650;
 float zoom = 15.0f;
 float rotx = 0;
 float roty = 0.001f;
@@ -20,6 +20,9 @@ unsigned char Buttons[3] = { 0 };
 bool simulation = false;
 
 int frame = 0, curTime, timebase = 0;
+char fps_str[30];
+char num_Mesh[100];
+char num_Const[100];
 
 Engine* _engine;
 
@@ -29,6 +32,53 @@ void Init(void)
 {
 	glEnable(GL_DEPTH_TEST);
 	_engine = new Engine(-9.81, 0.01, "OBJ\\lowPlane.obj", 1);
+
+	sprintf(num_Mesh, "Num of Faces: %d, Num of Vertices: %d"
+		, _engine->_cloths[0]->_param._numFaces, _engine->_cloths[0]->_param._numVertices);
+
+	//sprintf(num_Const, "Num of Strech: %d, Num of Bend: %d"
+	//	, _engine->_cloths[0]->_strechSpring->_param._numConstraint, _engine->_cloths[0]->_bendSpring->_param._numConstraint);
+
+	sprintf(fps_str, "FPS : %d", 0);
+}
+
+void DrawText(float x, float y, const char* text, void* font = NULL)
+{
+	glColor3f(0, 0, 0);
+	glDisable(GL_DEPTH_TEST);
+
+	glMatrixMode(GL_PROJECTION);
+	glPushMatrix();
+	glLoadIdentity();
+	glOrtho(0.0, (double)width, 0.0, (double)height, -1.0, 1.0);
+
+	glMatrixMode(GL_MODELVIEW);
+	glPushMatrix();
+	glLoadIdentity();
+
+	if (font == NULL)
+	{
+		font = GLUT_BITMAP_9_BY_15;
+	}
+
+	size_t len = strlen(text);
+
+	glRasterPos2f(x, y);
+	for (const char* letter = text; letter < text + len; letter++)
+	{
+		if (*letter == '\n')
+		{
+			y -= 12.0f;
+			glRasterPos2f(x, y);
+		}
+		glutBitmapCharacter(font, *letter);
+	}
+
+	glPopMatrix();
+	glMatrixMode(GL_PROJECTION);
+	glPopMatrix();
+	glMatrixMode(GL_MODELVIEW);
+	glEnable(GL_DEPTH_TEST);
 }
 
 void Draw(void)
@@ -40,6 +90,10 @@ void Draw(void)
 		_engine->draw();
 	else
 		_engine->drawWire();
+
+	DrawText(10.0f, 600.0f, num_Mesh);
+	//DrawText(10.0f, 580.0f, num_Const);
+	DrawText(10.0f, 580.0f, fps_str);
 
 	glDisable(GL_LIGHTING);
 }
@@ -88,6 +142,7 @@ void Update(void)
 		//	Capture(filename, width, height);
 		//}
 		frame++;
+
 		curTime = glutGet(GLUT_ELAPSED_TIME);
 
 		if (curTime - timebase > 1000)
@@ -97,6 +152,7 @@ void Update(void)
 			frame = 0;
 
 			printf("FPS : %f\n", fps);
+			sprintf(fps_str, "FPS : %d", (int)fps);
 		}
 
 		_engine->simulation();
@@ -106,7 +162,7 @@ void Update(void)
 
 void Display(void)
 {
-	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClearColor(0.5f, 0.5f, 0.5f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glLoadIdentity();
 
