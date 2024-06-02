@@ -61,6 +61,8 @@ void Mesh::LoadObj(char* filename, AABB boundary)
 	h_pos1.resize(h_pos.size(), make_REAL3(0.0, 0.0, 0.0));
 	h_vel.resize(h_pos.size(), make_REAL3(0.0, 0.0, 0.0));
 	h_fSaturation.resize(h_faceIdx.size(), 0.0);
+	h_cotWeight.resize(h_edgeIdx.size(), 0.0);
+	h_vAngle.resize(h_pos.size(), 0.0);
 
 	REAL3 maxPos = make_REAL3(-100.0, -100.0, -100.0);
 	REAL3 minPos = make_REAL3(100.0, 100.0, 100.0);
@@ -117,7 +119,7 @@ void Mesh::moveCenter(REAL scale, AABB boundary)
 
 	for (int i = 0; i < h_pos.size(); i++)
 	{
-		h_pos[i] += make_REAL3(0.5, 0.5, 1.0);
+		h_pos[i] += make_REAL3(0.5 , 0.5, 1.0);
 
 		REAL tmp = h_pos[i].y;
 		h_pos[i].y = h_pos[i].z;

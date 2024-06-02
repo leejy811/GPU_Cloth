@@ -30,6 +30,9 @@ struct ClothParam
 
 	REAL _diffusK;
 	REAL _gravityDiffusK;
+
+	REAL _surfTension;
+	REAL _adhesionThickness;
 };
 
 struct ConstParam

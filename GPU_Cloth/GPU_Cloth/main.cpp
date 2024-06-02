@@ -31,7 +31,7 @@ bool MODE = true;
 void Init(void)
 {
 	glEnable(GL_DEPTH_TEST);
-	_engine = new Engine(-9.81, 0.01, "OBJ\\lowPlane.obj", 1);
+	_engine = new Engine(-9.81, 0.01, "OBJ\\highPlane.obj", 1);
 
 	sprintf(num_Mesh, "Num of Faces: %d, Num of Vertices: %d"
 		, _engine->_cloths[0]->_param._numFaces, _engine->_cloths[0]->_param._numVertices);
@@ -44,6 +44,7 @@ void Init(void)
 
 void DrawText(float x, float y, const char* text, void* font = NULL)
 {
+	glDisable(GL_LIGHTING);
 	glColor3f(0, 0, 0);
 	glDisable(GL_DEPTH_TEST);
 
@@ -263,7 +264,7 @@ void Keyboard(unsigned char key, int x, int y)
 		break;
 	case 'f':
 	case 'F':
-		_engine->ApplyWind(make_REAL3(-0.5, -0.25, -0.25));
+		_engine->ApplyWind(make_REAL3(-0.25, -0.5, -0.25));
 		break;
 	case 't':
 	case 'T':

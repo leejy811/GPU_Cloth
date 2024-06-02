@@ -20,6 +20,8 @@ public:	//Host
 	PrefixArray<uint> h_nbFFaces;
 	//Edge
 	vector<uint2> h_edgeIdx;
+	vector<REAL> h_restAngle;
+	vector<REAL> h_cotWeight;
 	PrefixArray<uint> h_nbEFaces;
 	PrefixArray<uint> h_nbEVertices;
 	//Vertex
@@ -28,6 +30,7 @@ public:	//Host
 	vector<REAL3> h_vel;
 	vector<REAL3> h_vNormal;
 	vector<REAL> h_invMass;
+	vector<REAL> h_vAngle;
 	PrefixArray<uint> h_nbVFaces;
 	PrefixArray<uint> h_nbVertices;
 public:

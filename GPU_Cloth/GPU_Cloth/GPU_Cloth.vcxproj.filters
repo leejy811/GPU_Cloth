@@ -29,9 +29,6 @@
     <ClInclude Include="Constraint.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
-    <ClInclude Include="Constraint.cuh">
-      <Filter>헤더 파일</Filter>
-    </ClInclude>
     <ClInclude Include="Parameter.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
@@ -50,12 +47,15 @@
     <ClInclude Include="Device_Hash.cuh">
       <Filter>헤더 파일</Filter>
     </ClInclude>
+    <ClInclude Include="Edge.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="Constraint.cuh">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="PBD_ClothCuda.cu">
-      <Filter>소스 파일</Filter>
-    </CudaCompile>
-    <CudaCompile Include="Constraint.cu">
       <Filter>소스 파일</Filter>
     </CudaCompile>
     <CudaCompile Include="Vertex.cu">
@@ -68,6 +68,12 @@
       <Filter>소스 파일</Filter>
     </CudaCompile>
     <CudaCompile Include="Device_Hash.cu">
+      <Filter>소스 파일</Filter>
+    </CudaCompile>
+    <CudaCompile Include="Edge.cu">
+      <Filter>소스 파일</Filter>
+    </CudaCompile>
+    <CudaCompile Include="Constraint.cu">
       <Filter>소스 파일</Filter>
     </CudaCompile>
   </ItemGroup>

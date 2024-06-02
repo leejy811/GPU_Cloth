@@ -20,6 +20,8 @@ void Vertex::InitDeviceMem(uint numVertex)
 	cudaMalloc(&d_InvMass, sizeof(REAL) * numVertex);		cudaMemset(d_InvMass, 0, sizeof(REAL) * numVertex);
 	cudaMalloc(&d_SatMass, sizeof(REAL) * numVertex);		cudaMemset(d_SatMass, 0, sizeof(REAL) * numVertex);
 	cudaMalloc(&d_vSaturation, sizeof(REAL) * numVertex);		cudaMemset(d_vSaturation, 0, sizeof(REAL) * numVertex);
+	cudaMalloc(&d_Adhesion, sizeof(REAL3) * numVertex);		cudaMemset(d_Adhesion, 0, sizeof(REAL3) * numVertex);
+	cudaMalloc(&d_vAngle, sizeof(REAL) * numVertex);		cudaMemset(d_vAngle, 0, sizeof(REAL) * numVertex);
 }
 
 void Vertex::copyToDevice(const Mesh& mesh)
@@ -39,6 +41,7 @@ void Vertex::copyToHost(Mesh& mesh)
 {
 	cudaMemcpy(&mesh.h_pos[0], d_Pos, sizeof(REAL3) * mesh.h_pos.size(), cudaMemcpyDeviceToHost);
 	cudaMemcpy(&mesh.h_vNormal[0], d_vNormal, sizeof(REAL3) * mesh.h_vNormal.size(), cudaMemcpyDeviceToHost);
+	cudaMemcpy(&mesh.h_vAngle[0], d_vAngle, sizeof(REAL) * mesh.h_vAngle.size(), cudaMemcpyDeviceToHost);
 }
 
 void Vertex::FreeDeviceMem(void)
@@ -51,6 +54,8 @@ void Vertex::FreeDeviceMem(void)
 	cudaFree(d_InvMass);
 	cudaFree(d_SatMass);
 	cudaFree(d_vSaturation);
+	cudaFree(d_Adhesion);
+	cudaFree(d_vAngle);
 
 	d_nbFaces.clear();
 	d_nbVertices.clear();

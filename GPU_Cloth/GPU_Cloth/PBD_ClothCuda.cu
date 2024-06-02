@@ -32,6 +32,9 @@ void PBD_ClothCuda::Init(char* filename)
 	InitDeviceMem();
 	copyToDevice();
 
+	//InitSaturation << <divup(_param._numFaces, BLOCK_SIZE), BLOCK_SIZE >> >
+	//	(d_Face);
+
 	printf("Num of Faces: %d, Num of Vertices: %d\n", _param._numFaces, _param._numVertices);
 	printf("Num of Strech: %d, Num of Bend: %d\n", _strechSpring->_param._numConstraint, _bendSpring->_param._numConstraint);
 	printf("Num of Color Strech: %d, Num of Color Bend: %d\n", _strechSpring->_param._numColor, _bendSpring->_param._numColor);
@@ -41,7 +44,7 @@ void PBD_ClothCuda::InitParam(REAL gravity, REAL dt)
 {
 	_param._gridRes = 128;
 	_param._thickness = 4.0 / _param._gridRes;
-	_param._selfColliDamping = 0.1f;
+	_param._selfColliDamping = 0.05f;
 
 	_param._iteration = 10;
 	_param._springK = 0.9f;
@@ -51,11 +54,14 @@ void PBD_ClothCuda::InitParam(REAL gravity, REAL dt)
 	_param._subdt = dt / _param._iteration;
 	_param._subInvdt = 1.0 / _param._subdt;
 
-	_param._maxsaturation = 20.0;
-	_param._absorptionK = 0.05;
+	_param._maxsaturation = 200.0;
+	_param._absorptionK = 0.001;
 
-	_param._diffusK = 0.05;
-	_param._gravityDiffusK = 0.01;
+	_param._diffusK = 0.3;
+	_param._gravityDiffusK = 0.3;
+
+	_param._surfTension = 75;
+	_param._adhesionThickness = 8.0 / _param._gridRes;
 }
 
 void PBD_ClothCuda::buildConstraint(void)
@@ -100,6 +106,139 @@ void PBD_ClothCuda::buildConstraint(void)
 
 	_strechSpring->Init(_param._numVertices);
 	_bendSpring->Init(_param._numVertices);
+
+	h_Mesh->h_restAngle.resize(_param._numEdges);
+	ComputeRestAngle();
+}
+
+void PBD_ClothCuda::ComputeRestAngle(void)
+{
+	for (int i = 0; i < _param._numVertices; i++)
+	{
+		h_Mesh->h_vAngle[i] = 0.0;
+	}
+
+	for (int i = 0; i < _param._numEdges; i++)
+	{
+		if (h_Mesh->h_nbEFaces._index[i + 1] - h_Mesh->h_nbEFaces._index[i] != 2)
+			continue;
+
+		uint edgeSum = h_Mesh->h_edgeIdx[i].x + h_Mesh->h_edgeIdx[i].y;
+		uint fId0 = h_Mesh->h_nbEFaces._array[h_Mesh->h_nbEFaces._index[i]];
+		uint fId1 = h_Mesh->h_nbEFaces._array[h_Mesh->h_nbEFaces._index[i] + 1];
+
+		uint vId0 = h_Mesh->h_faceIdx[fId0].x + h_Mesh->h_faceIdx[fId0].y + h_Mesh->h_faceIdx[fId0].z - edgeSum;
+		uint vId1 = h_Mesh->h_faceIdx[fId1].x + h_Mesh->h_faceIdx[fId1].y + h_Mesh->h_faceIdx[fId1].z - edgeSum;
+		uint vId2 = h_Mesh->h_edgeIdx[i].x;
+		uint vId3 = h_Mesh->h_edgeIdx[i].y;
+
+		REAL3 p0 = h_Mesh->h_pos[vId0];
+		REAL3 p1 = h_Mesh->h_pos[vId1];
+		REAL3 p2 = h_Mesh->h_pos[vId2];
+		REAL3 p3 = h_Mesh->h_pos[vId3];
+
+		REAL3 e = p3 - p2;
+		REAL length = Length(e);
+		if (length < 1e-6)
+		{
+			return;
+		}
+
+		REAL invlength = 1.0 / length;
+		REAL3 n1 = Cross(p2 - p0, p3 - p0);
+		REAL3 n2 = Cross(p3 - p1, p2 - p1);
+		n1 /= LengthSquared(n1);
+		n2 /= LengthSquared(n2);
+
+		REAL3 d0 = n1 * length;
+		REAL3 d1 = n2 * length;
+		REAL3 d2 = n1 * (Dot(p0 - p3, e) * invlength) + n2 * (Dot(p1 - p3, e) * invlength);
+		REAL3 d3 = n1 * (Dot(p2 - p0, e) * invlength) + n2 * (Dot(p2 - p1, e) * invlength);
+
+		Normalize(n1);
+		Normalize(n2);
+		REAL dot = Dot(n1, n2);
+
+		if (dot < -1.0)
+			dot = -1.0;
+		if (dot > 1.0)
+			dot = 1.0;
+
+		REAL restAngle = acos(dot);
+		h_Mesh->h_restAngle[i] = restAngle;
+
+		h_Mesh->h_vAngle[vId2] += restAngle;
+		h_Mesh->h_vAngle[vId3] += restAngle;
+	}
+
+	for (int i = 0; i < _param._numVertices; i++)
+	{
+		uint numNb = h_Mesh->h_nbVertices._index[i + 1] - h_Mesh->h_nbVertices._index[i];
+		if (numNb == 0)
+			continue;
+		h_Mesh->h_vAngle[i] /= numNb;
+	}
+}
+
+void PBD_ClothCuda::ComputeLaplacian(void)
+{
+	REAL lambda = 2.0;
+	vector<REAL3> pos1;
+	for (int i = 0; i < _param._numVertices; i++)
+	{
+		REAL3 pos = h_Mesh->h_pos[i];
+		REAL3 sumPos = make_REAL3(0.0, 0.0, 0.0);
+
+		uint fid0 = h_Mesh->h_nbVFaces._index[i];
+		uint fid1 = h_Mesh->h_nbVFaces._index[i + 1];
+		uint numnbF = fid1 - fid0;
+		REAL satSum = 0.0f;
+		for (int j = 0; j < fid1 - fid0; j++)
+		{
+			uint fIdx = h_Mesh->h_nbVFaces._array[h_Mesh->h_nbVFaces._index[i] + j];
+			satSum += h_Mesh->h_fSaturation[fIdx];
+		}
+
+		if (fid1 - fid0 == 0)
+			continue;
+
+		REAL weight = h_Mesh->h_vAngle[i] * (satSum / (_param._maxsaturation * numnbF));
+		uint id0 = h_Mesh->h_nbVertices._index[i];
+		uint id1 = h_Mesh->h_nbVertices._index[i + 1];
+		uint numnbV = id1 - id0;
+		for (int j = 0;j < numnbV;j++)
+		{
+			uint vIdx = h_Mesh->h_nbVertices._array[h_Mesh->h_nbVertices._index[i] + j];
+			sumPos += h_Mesh->h_pos[vIdx];
+		}
+		REAL valence = id1 - id0;
+		if (valence == 0)
+			continue;
+		REAL3 finalPos = (sumPos / valence - pos) * -1 * lambda * weight + pos;
+
+		if (h_Mesh->h_pos[i].x > 0.89)
+		{
+			pos1.push_back(pos);
+			continue;
+		}
+		pos1.push_back(finalPos);
+	}
+
+	h_Mesh->h_pos = pos1;
+}
+
+void PBD_ClothCuda::ComputeWrinkCloth_kernel(void)
+{
+	uint numThreads, numBlocks;
+	ComputeGridSize(_param._numEdges, 64, numBlocks, numThreads);
+
+	cudaMemset(d_Vertex.d_vAngle, 0, sizeof(REAL) * _param._numVertices);
+	ComputeAngle_kernel << <numBlocks, numThreads >> >
+		(d_Edge, d_Vertex, d_Face);
+
+	ComputeGridSize(_param._numVertices, 64, numBlocks, numThreads);
+	ComputeLaplacian_kernel << <numBlocks, numThreads >> >
+		(d_Vertex, d_Face);
 }
 
 void PBD_ClothCuda::ComputeGravity_kernel()
@@ -136,6 +275,21 @@ void PBD_ClothCuda::ProjectConstraint_kernel(void)
 {
 	_strechSpring->IterateConstraint(d_Vertex.d_Pos1, d_Vertex.d_InvMass, d_Vertex.d_SatMass);
 	_bendSpring->IterateConstraint(d_Vertex.d_Pos1, d_Vertex.d_InvMass, d_Vertex.d_SatMass);
+	//AngleConstraint_kernel();
+}
+
+void PBD_ClothCuda::AngleConstraint_kernel(void)
+{
+	uint numThreads, numBlocks;
+	ComputeGridSize(_param._numEdges, 64, numBlocks, numThreads);
+
+	Dvector<REAL> deltaPos(_param._numVertices * 3u);	deltaPos.memset(0);
+	SolveAngleConstraint_kernel << <numBlocks, numThreads >> >
+		(d_Edge, d_Vertex, d_Face, deltaPos());
+
+	ComputeGridSize(_param._numVertices, 64, numBlocks, numThreads);
+	ApplyConstraintDeltaPos_kernel << <numBlocks, numThreads >> >
+		(d_Vertex, deltaPos());
 }
 
 void PBD_ClothCuda::SetHashTable_kernel(void)
@@ -154,9 +308,17 @@ void PBD_ClothCuda::UpdateFaceAABB_Kernel(void)
 
 void PBD_ClothCuda::Colide_kernel(void)
 {
+	//SelfCollision_kernel();
+	//AdhesionForce_kernel();
+}
+
+void PBD_ClothCuda::SelfCollision_kernel(void)
+{
 	uint numThreads, numBlocks;
+
 	Dvector<REAL> impulse(_param._numVertices * 3u);
 	impulse.memset(0);
+
 	ComputeGridSize(_param._numVertices, 64, numBlocks, numThreads);
 	Colide_PP << <numBlocks, numThreads >> >
 		(d_Vertex, d_Hash, impulse());
@@ -168,6 +330,22 @@ void PBD_ClothCuda::Colide_kernel(void)
 	ComputeGridSize(_param._numVertices, 64, numBlocks, numThreads);
 	ApplyImpulse_kernel << <numBlocks, numThreads >> >
 		(d_Vertex, impulse());
+}
+
+void PBD_ClothCuda::AdhesionForce_kernel(void)
+{
+	uint numThreads, numBlocks;
+
+	Dvector<REAL> adhesion(_param._numVertices * 3u);
+	adhesion.memset(0);
+
+	ComputeGridSize(_param._numVertices, 64, numBlocks, numThreads);
+	UpdateAdhesionForce_kernel << <numBlocks, numThreads >> >
+		(d_Vertex, d_Hash, adhesion());
+
+	ComputeGridSize(_param._numVertices, 64, numBlocks, numThreads);
+	ApplyAdhesion_kernel << <numBlocks, numThreads >> >
+		(d_Vertex, adhesion());
 }
 
 void PBD_ClothCuda::WetCloth_Kernel(void)
@@ -212,8 +390,11 @@ void PBD_ClothCuda::UpdateMass_Kernel(void)
 
 void PBD_ClothCuda::LevelSetCollision_kernel(void)
 {
+	//LevelSetCollision_D << <divup(_param._numVertices, BLOCK_SIZE), BLOCK_SIZE >> >
+	//	(d_Vertex, d_Face, true);
+
 	LevelSetCollision_D << <divup(_param._numVertices, BLOCK_SIZE), BLOCK_SIZE >> >
-		(d_Vertex);
+		(d_Vertex, d_Face, false);
 }
 
 void PBD_ClothCuda::draw(void)
@@ -238,6 +419,11 @@ void PBD_ClothCuda::draw(void)
 		//REAL color = 1.0 - ratio;
 		//glColor3f(color, color, color);
 
+		//glColor3f(1.0f, 1.0f, 1.0f);
+
+		//REAL color = (h_Mesh->h_vAngle[ino0] + h_Mesh->h_vAngle[ino1] + h_Mesh->h_vAngle[ino2]) / 3;
+		//glColor3f(color, color, color);
+
 		glNormal3f(h_Mesh->h_vNormal[ino0].x, h_Mesh->h_vNormal[ino0].y, h_Mesh->h_vNormal[ino0].z);
 		glVertex3f(a.x, a.y, a.z);
 		glNormal3f(h_Mesh->h_vNormal[ino1].x, h_Mesh->h_vNormal[ino1].y, h_Mesh->h_vNormal[ino1].z);
@@ -248,9 +434,9 @@ void PBD_ClothCuda::draw(void)
 		glEnd();
 	}
 
-	glTranslatef(0.5f, 0.5f, 0.5f);
-	glColor3f(1, 1, 1);
-	glutSolidSphere(0.28f, 50, 50);
+	//glTranslatef(0.5f, 0.5f, 0.5f);
+	//glColor3f(1, 1, 1);
+	//glutSolidSphere(0.08f, 50, 50);
 
 	glEnable(GL_LIGHTING);
 }
@@ -258,14 +444,22 @@ void PBD_ClothCuda::draw(void)
 void PBD_ClothCuda::drawWire(void)
 {
 	glEnable(GL_LIGHTING);
-
+	glDisable(GL_LIGHTING);
 	glBegin(GL_LINES);
+
 	for (uint i = 0u; i < _param._numEdges; i++)
 	{
 		uint ino0 = h_Mesh->h_edgeIdx[i].x;
 		uint ino1 = h_Mesh->h_edgeIdx[i].y;
 		REAL3 a = h_Mesh->h_pos[ino0];
 		REAL3 b = h_Mesh->h_pos[ino1];
+
+		uint fId0 = h_Mesh->h_nbEFaces._array[h_Mesh->h_nbEFaces._index[i]];
+		uint fId1 = h_Mesh->h_nbEFaces._array[h_Mesh->h_nbEFaces._index[i] + 1];
+
+		REAL satSum = h_Mesh->h_fSaturation[fId0] + h_Mesh->h_fSaturation[fId1];
+		REAL color = ((h_Mesh->h_restAngle[i] * 0.5) + 0.5) * (satSum / (_param._maxsaturation * 2));
+		glColor3f(color, color, color);
 
 		glNormal3f(h_Mesh->h_vNormal[ino0].x, h_Mesh->h_vNormal[ino0].y, h_Mesh->h_vNormal[ino0].z);
 		glVertex3f(a.x, a.y, a.z);
@@ -296,6 +490,7 @@ void PBD_ClothCuda::InitDeviceMem(void)
 {
 	d_Vertex.InitDeviceMem(_param._numVertices);
 	d_Face.InitDeviceMem(_param._numFaces);
+	d_Edge.InitDeviceMem(_param._numEdges);
 	d_Hash.InitDeviceMem(_param._numVertices);
 }
 
@@ -303,6 +498,7 @@ void PBD_ClothCuda::FreeDeviceMem(void)
 {
 	d_Vertex.FreeDeviceMem();
 	d_Face.FreeDeviceMem();
+	d_Edge.FreeDeviceMem();
 	d_Hash.FreeDeviceMem();
 }
 
@@ -310,6 +506,7 @@ void PBD_ClothCuda::copyToDevice(void)
 {
 	d_Vertex.copyToDevice(*h_Mesh);
 	d_Face.copyToDevice(*h_Mesh);
+	d_Edge.copyToDevice(*h_Mesh);
 }
 
 void PBD_ClothCuda::copyToHost(void)

@@ -8,6 +8,7 @@
 #include "CUDA_Custom/Dvector.h"
 #include "CUDA_Custom/PrefixArray.h"
 #include "Vertex.h"
+#include "Edge.h"
 #include "Parameter.h"
 #include <vector>
 
@@ -17,6 +18,8 @@ using namespace std;
 
 class Constraint
 {
+public:	//const
+	ConstParam _param;
 public:		//Device
 	Dvector<uint2> d_EdgeIdx;
 	Dvector<REAL> d_RestLength;
@@ -28,8 +31,6 @@ public:		//Host
 	PrefixArray<uint> h_ColorIdx;
 	PrefixArray<uint> h_nbCEdges;
 	PrefixArray<uint> h_nbGVertices;
-public:	//const
-	ConstParam _param;
 public:
 	Constraint();
 	Constraint(uint iter, REAL stiff)

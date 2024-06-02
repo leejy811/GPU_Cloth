@@ -32,6 +32,7 @@ void	Engine::simulation(void)
 			cloth->Intergrate_kernel();
 			cloth->LevelSetCollision_kernel();
 			cloth->WetCloth_Kernel();
+			cloth->ComputeWrinkCloth_kernel();
 		}
 		cloth->copyToHost();
 	}

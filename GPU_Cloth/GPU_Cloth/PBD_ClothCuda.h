@@ -11,6 +11,7 @@
 #include "Constraint.h"
 #include "Vertex.h"
 #include "Face.h"
+#include "Edge.h"
 #include "Device_Hash.h"
 #include "Mesh.h"
 #include "Parameter.h"
@@ -35,6 +36,7 @@ public:	//Constraint
 public:	//Mesh
 	Vertex d_Vertex;
 	Face d_Face;
+	Edge d_Edge;
 	Device_Hash d_Hash;
 	Mesh* h_Mesh;
 public:
@@ -49,6 +51,8 @@ public:		//init
 	void Init(char* filename);
 	void InitParam(REAL gravity, REAL dt);
 	void buildConstraint(void);
+	void ComputeRestAngle(void);
+	void ComputeLaplacian(void);
 public:		//Update
 	void ComputeGravity_kernel(void);
 	void ComputeWind_kernel(REAL3 wind);
@@ -56,15 +60,19 @@ public:		//Update
 	void ComputeFaceNormal_kernel(void);
 	void ComputeVertexNormal_kernel(void);
 	void ProjectConstraint_kernel(void);
+	void AngleConstraint_kernel(void);
 	void SetHashTable_kernel(void);
 	void UpdateFaceAABB_Kernel(void);
 	void Colide_kernel(void);
+	void SelfCollision_kernel(void);
+	void AdhesionForce_kernel(void);
 	void WetCloth_Kernel(void);
 	void Absorption_Kernel(void);
 	void Diffusion_Kernel(void);
 	void Dripping_Kernel(void);
 	void UpdateMass_Kernel(void);
 	void LevelSetCollision_kernel(void);
+	void ComputeWrinkCloth_kernel(void);
 public:
 	void draw(void);
 	void drawWire(void);

@@ -1,5 +1,4 @@
 #include "Constraint.h"
-#include <stdio.h>
 
 __constant__ ConstParam constParam;
 
