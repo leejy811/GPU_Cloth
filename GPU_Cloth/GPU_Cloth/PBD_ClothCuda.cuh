@@ -3,11 +3,22 @@
 
 __constant__ ClothParam clothParam;
 
-__global__ void InitSaturation(Face face)
+__global__ void InitSaturation(Face face, Vertex ver)
 {
 	uint idx = threadIdx.x + blockDim.x * blockIdx.x;
 
 	if (idx >= clothParam._numFaces)
+		return;
+
+	uint iv0 = face.d_faceIdx[idx].x;
+	uint iv1 = face.d_faceIdx[idx].y;
+	uint iv2 = face.d_faceIdx[idx].z;
+
+	REAL3 v0 = ver.d_Pos[iv0];
+	REAL3 v1 = ver.d_Pos[iv1];
+	REAL3 v2 = ver.d_Pos[iv2];
+
+	if (!(v0.x > 0.95 || v0.x < 0.05 || v0.z > 0.95 || v0.z < 0.05))
 		return;
 
 	face.d_fSaturation[idx] = clothParam._maxsaturation;
@@ -66,8 +77,11 @@ __global__ void CompIntergrate_kernel(Vertex ver)
 	//if (ver.d_Pos1[idx].x > 0.495 && ver.d_Pos1[idx].x < 0.515 && ver.d_Pos1[idx].y > 0.49)
 	//	return;
 
-	if (ver.d_Pos1[idx].x > 0.9)
+	if (ver.d_Pos1[idx].y > 0.9)
 		return;
+
+	//if (ver.d_Pos1[idx].x > 0.95 || ver.d_Pos1[idx].x < 0.05 || ver.d_Pos1[idx].z > 0.95 || ver.d_Pos1[idx].z < 0.05)
+	//	return;
 
 	ver.d_Vel[idx] = (ver.d_Pos1[idx] - ver.d_Pos[idx]) * clothParam._subInvdt;
 
@@ -77,8 +91,7 @@ __global__ void CompIntergrate_kernel(Vertex ver)
 	if (speed > maxSpeed)
 		ver.d_Vel[idx] *= (maxSpeed / speed);
 
-	REAL dt = 1.0 / clothParam._subInvdt;
-	ver.d_Pos[idx] += ver.d_Vel[idx] * dt;
+	ver.d_Pos[idx] += ver.d_Vel[idx] * clothParam._subdt;
 
 	//ver.d_Pos[idx] = ver.d_Pos1[idx];
 }
@@ -477,6 +490,9 @@ __global__ void WaterAbsorption_Kernel(Face face, Vertex ver)
 	REAL3 v1 = ver.d_Pos[iv1];
 	REAL3 v2 = ver.d_Pos[iv2];
 
+	if (!(v0.x > 0.95 || v0.x < 0.05 || v0.z > 0.95 || v0.z < 0.05))
+		return;
+
 	REAL area = (Length(Cross(v1 - v0, v2 - v0))) / 2;
 	REAL mass = ver.d_vSaturation[iv0] + ver.d_vSaturation[iv1] + ver.d_vSaturation[iv2];
 	REAL abMass = clothParam._absorptionK * (clothParam._maxsaturation - face.d_fSaturation[idx]) * area;
@@ -494,7 +510,7 @@ __global__ void WaterAbsorption_Kernel(Face face, Vertex ver)
 	}
 }
 
-__global__ void WaterDiffusion_Kernel(Face face, Vertex ver, REAL* delS)
+__global__ void WaterDiffusion_Kernel(Face face, Vertex ver, REAL* delS, REAL* delD)
 {
 	uint idx = threadIdx.x + blockDim.x * blockIdx.x;
 
@@ -530,12 +546,17 @@ __global__ void WaterDiffusion_Kernel(Face face, Vertex ver, REAL* delS)
 
 		REAL3 cn = (nbv0 + nbv1 + nbv2) / 3;
 		REAL sn = face.d_fSaturation[fIdx];
-		REAL cosln = Dot(cl, cn) / (Length(cl) * Length(cn));
-		sln[i] = min(0.0, clothParam._diffusK * (sl - sn) + clothParam._gravityDiffusK * cosln);
+		REAL3 cln = cn - cl;
+		REAL cosln = Dot(cln, make_REAL3(0, -1, 0)) / Length(cln);
+		sln[i] = min((REAL)0.0, clothParam._diffusK * (sl - sn) + clothParam._gravityDiffusK * cosln * sl);
+
 		sSum += sln[i];
 
 		if (cosln > 0)
-			atomicAdd_REAL(face.d_fDripbuf + fIdx, face.d_fDripbuf[idx] * cosln);
+		{
+			face.d_fDripbuf[idx] -= face.d_fDripbuf[idx] * cosln;
+			atomicAdd_REAL(delD + fIdx, face.d_fDripbuf[idx] * cosln);
+		}
 
 		//Squeeze Cloth
 		//REAL3 clr = (ver.d_restPos[idx] + ver.d_restPos[idx] + ver.d_restPos[idx]) / 3;
@@ -550,6 +571,7 @@ __global__ void WaterDiffusion_Kernel(Face face, Vertex ver, REAL* delS)
 		norm = sl / sSum;
 
 	REAL areal = (Length(Cross(v1 - v0, v2 - v0))) / 2;
+	REAL delL = 0.0;
 	for (int i = 0; i < numNbFaces; i++)
 	{
 		uint fIdx = face.d_nbFace._array[face.d_nbFace._index[idx] + i];
@@ -564,12 +586,14 @@ __global__ void WaterDiffusion_Kernel(Face face, Vertex ver, REAL* delS)
 
 		REAL arean = (Length(Cross(nbv1 - nbv0, nbv2 - nbv0))) / 2;
 
-		delS[idx] -= norm * sln[i];
+		delL -= norm * sln[i];
 		atomicAdd_REAL(delS + fIdx, norm * sln[i] * (areal / arean));
 	}
+
+	face.d_fSaturation[idx] += delL;
 }
 
-__global__ void ApplyDeltaSaturation_Kernel(Face face, REAL* delS)
+__global__ void ApplyDeltaSaturation_Kernel(Face face, REAL* delS, REAL* delD)
 {
 	uint idx = threadIdx.x + blockDim.x * blockIdx.x;
 
@@ -577,6 +601,7 @@ __global__ void ApplyDeltaSaturation_Kernel(Face face, REAL* delS)
 		return;
 
 	face.d_fSaturation[idx] += delS[idx];
+	face.d_fDripbuf[idx] += delD[idx];
 }
 
 __global__ void WaterDripping_Kernel(Face face, Vertex ver)
@@ -600,10 +625,10 @@ __global__ void WaterDripping_Kernel(Face face, Vertex ver)
 		REAL exMass = (face.d_fSaturation[idx] - clothParam._maxsaturation) * area;
 		face.d_fDripbuf[idx] += exMass;
 
-		while (face.d_fDripbuf[idx] > face.d_fDripThres[idx])
+		while (face.d_fDripbuf[idx] > 1.0)
 		{
 			//Particle 생성 및 초기화 추가
-			face.d_fDripbuf[idx] -= 0.01;
+			face.d_fDripbuf[idx] -= 0.5;
 		}
 
 		face.d_fSaturation[idx] = clothParam._maxsaturation;

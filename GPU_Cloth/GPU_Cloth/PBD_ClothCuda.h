@@ -6,7 +6,7 @@
 #include "device_launch_parameters.h"
 #include "CUDA_Custom/DeviceManager.h"
 #include "CUDA_Custom/Dvector.h"
-#include "CUDA_Custom/PrefixArray.h"
+#include "CUDA_Custom/PrefixArray.h"1
 #include "thrust/sort.h"
 #include "Constraint.h"
 #include "Vertex.h"
@@ -14,7 +14,9 @@
 #include "Edge.h"
 #include "Device_Hash.h"
 #include "Mesh.h"
+#include "ClothRenderer.h"
 #include "Parameter.h"
+#include "Camera.h"
 #include <GL/freeglut.h>
 #include <vector>
 #include <fstream>
@@ -30,6 +32,8 @@ public:
 	//Parameter
 	ClothParam _param;
 	AABB _boundary;
+
+	int frame = 0;
 public:	//Constraint
 	Constraint* _strechSpring;
 	Constraint* _bendSpring;
@@ -39,6 +43,7 @@ public:	//Mesh
 	Edge d_Edge;
 	Device_Hash d_Hash;
 	Mesh* h_Mesh;
+	ClothRenderer* _clothRenderer;
 public:
 	PBD_ClothCuda();
 	PBD_ClothCuda(char* filename, REAL gravity, REAL dt)
@@ -54,6 +59,7 @@ public:		//init
 	void ComputeRestAngle(void);
 	void ComputeLaplacian(void);
 public:		//Update
+	void Simulation();
 	void ComputeGravity_kernel(void);
 	void ComputeWind_kernel(REAL3 wind);
 	void Intergrate_kernel(void);
@@ -75,7 +81,9 @@ public:		//Update
 	void ComputeWrinkCloth_kernel(void);
 public:
 	void draw(void);
+	void drawBO(const Camera& camera);
 	void drawWire(void);
+	void drawFlat(void);
 	REAL3 ScalarToColor(REAL val);
 public:		//Cuda
 	void InitDeviceMem(void);

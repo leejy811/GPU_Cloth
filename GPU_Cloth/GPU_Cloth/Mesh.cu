@@ -1,4 +1,5 @@
 #include "Mesh.h"
+#include <algorithm>
 
 Mesh::Mesh()
 {
@@ -8,6 +9,26 @@ Mesh::Mesh()
 Mesh::~Mesh()
 {
 
+}
+
+void Mesh::ExportObj(const char* filePath)
+{
+	ofstream fout;
+	fout.open(filePath);
+
+	for (int i = 0; i < h_pos.size(); i++)
+	{
+		string vStr = "v " + to_string(h_pos[i].x) + " " + to_string(h_pos[i].y) + " " + to_string(h_pos[i].z) + "\n";
+		fout.write(vStr.c_str(), vStr.size());
+	}
+
+	for (int i = 0; i < h_faceIdx.size(); i++)
+	{
+		string fStr = "f " + to_string(h_faceIdx[i].x + 1u) + " " + to_string(h_faceIdx[i].y + 1u) + " " + to_string(h_faceIdx[i].z + 1u) + "\n";
+		fout.write(fStr.c_str(), fStr.size());
+	}
+
+	fout.close();
 }
 
 void Mesh::LoadObj(char* filename, AABB boundary)
@@ -54,7 +75,9 @@ void Mesh::LoadObj(char* filename, AABB boundary)
 		return;
 	}
 
-	moveCenter(0.5, boundary);
+	ExportObj("OBJ\\Capture\\Cloth.obj");
+
+	moveCenter(filename, 0.5, boundary);
 	SetMass();
 	buildAdjacency();
 	computeNormal();
@@ -63,6 +86,7 @@ void Mesh::LoadObj(char* filename, AABB boundary)
 	h_fSaturation.resize(h_faceIdx.size(), 0.0);
 	h_cotWeight.resize(h_edgeIdx.size(), 0.0);
 	h_vAngle.resize(h_pos.size(), 0.0);
+	h_restPos = h_pos;
 
 	REAL3 maxPos = make_REAL3(-100.0, -100.0, -100.0);
 	REAL3 minPos = make_REAL3(100.0, 100.0, 100.0);
@@ -88,8 +112,15 @@ void Mesh::LoadObj(char* filename, AABB boundary)
 	printf("min Pos : %f / %f / %f\n", minPos.x, minPos.y, minPos.z);
 }
 
-void Mesh::moveCenter(REAL scale, AABB boundary)
+void Mesh::moveCenter(char* filename, REAL scale, AABB boundary)
 {
+	REAL offset = 0.0f;
+	if (filename == "OBJ\\highPlane.obj")
+	{
+		scale = 10;
+		offset = 3.0f;
+	}
+
 	REAL3 size = boundary._max - boundary._min;
 	REAL max_length = size.x;
 	if (max_length < size.y)
@@ -119,13 +150,13 @@ void Mesh::moveCenter(REAL scale, AABB boundary)
 
 	for (int i = 0; i < h_pos.size(); i++)
 	{
-		h_pos[i] += make_REAL3(0.5 , 0.5, 1.0);
+		h_pos[i] += make_REAL3(0.5, 0.5, 0.5 + offset);
 
-		REAL tmp = h_pos[i].y;
-		h_pos[i].y = h_pos[i].z;
-		h_pos[i].z = tmp;
+		//REAL tmp = h_pos[i].y;
+		//h_pos[i].y = h_pos[i].z;
+		//h_pos[i].z = tmp;
 
-		tmp = h_pos[i].x;
+		REAL tmp = h_pos[i].x;
 		h_pos[i].x = h_pos[i].z;
 		h_pos[i].z = tmp;
 	}

@@ -65,6 +65,8 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WIN32;WIN64;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <ForcedIncludeFiles>%(ForcedIncludeFiles)</ForcedIncludeFiles>
+      <ShowIncludes>false</ShowIncludes>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -83,8 +85,12 @@
     <ClCompile Include="main.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ExcludedFromBuild>
     </ClCompile>
+    <ClCompile Include="Shader.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Camera.h" />
+    <ClInclude Include="ClothRenderer.cuh" />
+    <ClInclude Include="ClothRenderer.h" />
     <ClInclude Include="Constraint.cuh" />
     <ClInclude Include="Constraint.h" />
     <ClInclude Include="Device_Hash.cuh" />
@@ -96,9 +102,11 @@
     <ClInclude Include="Parameter.h" />
     <ClInclude Include="PBD_ClothCuda.cuh" />
     <ClInclude Include="PBD_ClothCuda.h" />
+    <ClInclude Include="Shader.h" />
     <ClInclude Include="Vertex.h" />
   </ItemGroup>
   <ItemGroup>
+    <CudaCompile Include="ClothRenderer.cu" />
     <CudaCompile Include="Constraint.cu" />
     <CudaCompile Include="Device_Hash.cu" />
     <CudaCompile Include="Edge.cu" />
@@ -106,6 +114,16 @@
     <CudaCompile Include="Mesh.cu" />
     <CudaCompile Include="PBD_ClothCuda.cu" />
     <CudaCompile Include="Vertex.cu" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="shader\BasicShader.fs" />
+    <None Include="shader\BasicShader.vs" />
+    <None Include="shader\depth.fs" />
+    <None Include="shader\depth.vs" />
+    <None Include="shader\phong.fs" />
+    <None Include="shader\phong.vs" />
+    <None Include="shader\shadow.fs" />
+    <None Include="shader\shadow.vs" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -21,7 +21,7 @@ typedef std::chrono::system_clock::time_point ctimer;
 
 #define M_PI				3.14159265359
 
-#if 1
+#if 0
 typedef double				REAL;
 typedef double2				REAL2;
 typedef double3				REAL3;

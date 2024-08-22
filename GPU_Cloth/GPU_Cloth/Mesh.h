@@ -26,6 +26,7 @@ public:	//Host
 	PrefixArray<uint> h_nbEVertices;
 	//Vertex
 	vector<REAL3> h_pos;
+	vector<REAL3> h_restPos;
 	vector<REAL3> h_pos1;
 	vector<REAL3> h_vel;
 	vector<REAL3> h_vNormal;
@@ -34,15 +35,18 @@ public:	//Host
 	PrefixArray<uint> h_nbVFaces;
 	PrefixArray<uint> h_nbVertices;
 public:
+	uint numColor;
+public:
 	Mesh();
 	Mesh(char* filename, AABB boundary)
 	{
 		LoadObj(filename, boundary);
 	}
 	~Mesh();
+	void ExportObj(const char* path);
 private:		//init
 	void LoadObj(char* filename, AABB boundary);
-	void moveCenter(REAL scale, AABB boundary);
+	void moveCenter(char* filename, REAL scale, AABB boundary);
 	void buildAdjacency(void);
 	void buildAdjacency_VF(void);
 	void buildAdjacency_EF(void);

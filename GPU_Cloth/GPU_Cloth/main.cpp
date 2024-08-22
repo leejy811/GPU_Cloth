@@ -1,37 +1,39 @@
 #include <Windows.h>
 #include <iostream>
-#include "GL\glut.h"
 #include "Engine.h"
+#include "Camera.h"
 #include <ctime>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 int width = 800;
-int height = 650;
-float zoom = 15.0f;
-float rotx = 0;
-float roty = 0.001f;
-float tx = 0;
-float ty = 0;
+int height = 800;
 int lastx = 0;
 int lasty = 0;
 unsigned char Buttons[3] = { 0 };
 bool simulation = false;
 
+int fileNum = 0;
 int frame = 0, curTime, timebase = 0;
 char fps_str[30];
 char num_Mesh[100];
 char num_Const[100];
 
 Engine* _engine;
+Camera* _camera;
 
 bool MODE = true;
 
 void Init(void)
 {
 	glEnable(GL_DEPTH_TEST);
+
+	glewInit();
+	cudaGLSetGLDevice(0);
+
 	_engine = new Engine(-9.81, 0.01, "OBJ\\highPlane.obj", 1);
+	_camera = new Camera();
 
 	sprintf(num_Mesh, "Num of Faces: %d, Num of Vertices: %d"
 		, _engine->_cloths[0]->_param._numFaces, _engine->_cloths[0]->_param._numVertices);
@@ -45,7 +47,7 @@ void Init(void)
 void DrawText(float x, float y, const char* text, void* font = NULL)
 {
 	glDisable(GL_LIGHTING);
-	glColor3f(0, 0, 0);
+	glColor3f(1, 1, 1);
 	glDisable(GL_DEPTH_TEST);
 
 	glMatrixMode(GL_PROJECTION);
@@ -88,13 +90,13 @@ void Draw(void)
 	glEnable(GL_LIGHT0);
 
 	if (MODE)
-		_engine->draw();
+		_engine->drawBO(*_camera);
 	else
 		_engine->drawWire();
 
-	DrawText(10.0f, 600.0f, num_Mesh);
-	//DrawText(10.0f, 580.0f, num_Const);
-	DrawText(10.0f, 580.0f, fps_str);
+	//DrawText(10.0f, 780.0f, num_Mesh);
+	////DrawText(10.0f, 580.0f, num_Const);
+	//DrawText(10.0f, 760.0f, fps_str);
 
 	glDisable(GL_LIGHTING);
 }
@@ -136,13 +138,14 @@ void Update(void)
 {
 	if (simulation)
 	{
-		//if (frame == 0 || frame % 4 == 0) {
-		//	static int index = 0;
-		//	char filename[100];
-		//	sprintf(filename, "capture\\capture-%d.bmp", index++);
-		//	Capture(filename, width, height);
-		//}
+		if (fileNum == 0 || fileNum % 3 == 0) {
+			static int index = 0;
+			char filename[100];
+			sprintf(filename, "capture\\capture-%d.jpg", index++);
+			Capture(filename, width, height);
+		}
 		frame++;
+		fileNum++;
 
 		curTime = glutGet(GLUT_ELAPSED_TIME);
 
@@ -157,31 +160,24 @@ void Update(void)
 		}
 
 		_engine->simulation();
+
+		//if (fileNum % 5 == 0)
+		//{
+		//	string pathStr = "OBJ\\Capture\\Cloth" + to_string(fileNum) + ".obj";
+		//	_engine->_cloths[0]->h_Mesh->ExportObj(pathStr.c_str());
+		//}
 	}
 	::glutPostRedisplay();
 }
 
 void Display(void)
 {
-	glClearColor(0.5f, 0.5f, 0.5f, 1.0f);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glLoadIdentity();
 
-	/*
-	zoom = 5.699999;
-	tx = 0.350000;
-	ty = 1.500000;
-	rotx = 15.500000;
-	roty = -45.499001;
-	*/
-
-	glTranslatef(0, 0, -zoom);
-	glTranslatef(tx, ty, 0);
-	glRotatef(rotx, 1, 0, 0);
-	glRotatef(roty, 0, 1, 0);
-
-	//printf("%f, %f, %f, %f, %f\n", -zoom, tx, ty, rotx, roty);
-
+	glUseProgram(0);
+	_camera->SetCameraForOpenGL();
 	Draw();
 
 	glutSwapBuffers();
@@ -196,6 +192,7 @@ void Reshape(int w, int h)
 	glViewport(0, 0, w, h);
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
+	_camera->SetPerspective(45, (float)w / h, 0.1, 100);
 	gluPerspective(45, (float)w / h, 0.1, 100);
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
@@ -210,17 +207,15 @@ void Motion(int x, int y)
 
 	if (Buttons[2])
 	{
-		zoom -= (float)0.05f * diffx;
+		_camera->CameraZoom((float)-0.05f * diffx);
 	}
 	else if (Buttons[0])
 	{
-		rotx += (float)0.5f * diffy;
-		roty += (float)0.5f * diffx;
+		_camera->CameraRotate((float)0.5f * diffy, (float)0.5f * diffx);
 	}
 	else if (Buttons[1])
 	{
-		tx += (float)0.05f * diffx;
-		ty -= (float)0.05f * diffy;
+		_camera->CameraTranslate((float)0.05f * diffx, (float)-0.05f * diffy);
 	}
 	glutPostRedisplay();
 }

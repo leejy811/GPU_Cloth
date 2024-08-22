@@ -7,12 +7,18 @@
     <Filter Include="소스 파일">
       <UniqueIdentifier>{4938e2c3-20e7-46b0-8bbe-78b0d4c5ee51}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Shader">
+      <UniqueIdentifier>{b344f190-6da8-45ef-b670-aaa59b727870}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="Engine.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="Shader.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
   </ItemGroup>
@@ -53,6 +59,18 @@
     <ClInclude Include="Constraint.cuh">
       <Filter>헤더 파일</Filter>
     </ClInclude>
+    <ClInclude Include="ClothRenderer.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="ClothRenderer.cuh">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="Shader.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="Camera.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="PBD_ClothCuda.cu">
@@ -76,5 +94,34 @@
     <CudaCompile Include="Constraint.cu">
       <Filter>소스 파일</Filter>
     </CudaCompile>
+    <CudaCompile Include="ClothRenderer.cu">
+      <Filter>소스 파일</Filter>
+    </CudaCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="shader\BasicShader.fs">
+      <Filter>Shader</Filter>
+    </None>
+    <None Include="shader\BasicShader.vs">
+      <Filter>Shader</Filter>
+    </None>
+    <None Include="shader\phong.fs">
+      <Filter>Shader</Filter>
+    </None>
+    <None Include="shader\phong.vs">
+      <Filter>Shader</Filter>
+    </None>
+    <None Include="shader\shadow.fs">
+      <Filter>Shader</Filter>
+    </None>
+    <None Include="shader\shadow.vs">
+      <Filter>Shader</Filter>
+    </None>
+    <None Include="shader\depth.vs">
+      <Filter>Shader</Filter>
+    </None>
+    <None Include="shader\depth.fs">
+      <Filter>Shader</Filter>
+    </None>
   </ItemGroup>
 </Project>
