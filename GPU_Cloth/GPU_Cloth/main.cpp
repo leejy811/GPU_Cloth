@@ -138,12 +138,12 @@ void Update(void)
 {
 	if (simulation)
 	{
-		if (fileNum == 0 || fileNum % 3 == 0) {
-			static int index = 0;
-			char filename[100];
-			sprintf(filename, "capture\\capture-%d.jpg", index++);
-			Capture(filename, width, height);
-		}
+		//if (fileNum == 0 || fileNum % 3 == 0) {
+		//	static int index = 0;
+		//	char filename[100];
+		//	sprintf(filename, "capture\\capture-%d.jpg", index++);
+		//	Capture(filename, width, height);
+		//}
 		frame++;
 		fileNum++;
 
